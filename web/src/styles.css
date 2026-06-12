@@ -737,6 +737,23 @@ th {
   object-fit: contain;
 }
 
+.run-output-frame {
+  display: grid;
+  aspect-ratio: 16 / 10;
+  min-height: 280px;
+  place-items: center;
+  border: 1px solid #e5eadf;
+  background: #ffffff;
+  color: #65705f;
+  overflow: hidden;
+}
+
+.run-output-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .comparison-meta {
   display: flex;
   align-items: center;

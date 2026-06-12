@@ -31,6 +31,8 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
   const reportEntries = useMemo(() => Object.entries(result?.report ?? {}).slice(0, 6), [result]);
   const comparisonRuns = useMemo(() => comparison?.runs.slice(0, 2) ?? [], [comparison]);
   const uploadBusy = personUploadBusy || garmentUploadBusy;
+  const runOutputPath = vtonOutputPath(result, outputPath);
+  const runOutputUrl = client.artifactUrl(runOutputPath);
 
   useEffect(() => {
     let cancelled = false;
@@ -183,6 +185,23 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
       <section className="panel workbench-output">
         <div className="panel-header compact">
           <div>
+            <p className="eyebrow">Generated artifact</p>
+            <h2>Run output</h2>
+          </div>
+          <span className="mono">{result?.request_id || "-"}</span>
+        </div>
+        <div className="run-output-frame">
+          {runOutputUrl ? <img alt="VTON generated output" src={runOutputUrl} /> : <ImagePlus aria-hidden="true" size={34} />}
+        </div>
+        <div className="asset-current">
+          <span>Saved result</span>
+          <strong title={runOutputPath ?? outputPath}>{runOutputPath ?? outputPath}</strong>
+        </div>
+      </section>
+
+      <section className="panel workbench-output">
+        <div className="panel-header compact">
+          <div>
             <p className="eyebrow">Evaluation gallery</p>
             <h2>Side-by-side outputs</h2>
           </div>
@@ -245,6 +264,21 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
       </section>
     </section>
   );
+}
+
+function vtonOutputPath(result: VtonResponse | undefined, fallbackPath: string): string | undefined {
+  if (!result || result.error || result.status !== "completed") {
+    return undefined;
+  }
+  const output = result.report?.output;
+  if (isRecord(output) && typeof output.path === "string" && output.path.trim()) {
+    return output.path;
+  }
+  return fallbackPath.trim() || undefined;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 type VtonUploadRole = "person" | "garment";
