@@ -77,6 +77,7 @@ func selectHighlights(reports []artifactReport) map[string]artifactReport {
 		"demo_acceptance":    {schema: "tryops.professor_demo_acceptance.v1", preferredSub: "demo_acceptance/professor_demo_acceptance.json"},
 		"demo_video":         {schema: "tryops.professor_demo_video.v1", preferredSub: "demo_video/professor_demo_video.json"},
 		"vulnerability":      {schema: "tryops.vulnerability_scan.v1", preferredSub: "security/vulnerability_scan_report.json"},
+		"live_supply_chain":  {schema: "tryops.live_supply_chain.v1", preferredSub: "ci/live_supply_chain_report.json"},
 		"ci_contract":        {schema: "tryops.native_ci_contract.v1", preferredSub: "ci/native_ci_contract.json"},
 		"dependency_lock":    {schema: "tryops.native_dependency_lock_contract.v1", preferredSub: "dependencies/native_dependency_lock_contract.json"},
 		"data_versioning":    {schema: "tryops.dvc_minio_versioning.v1", preferredSub: "data_versioning/dvc_minio_report.json"},

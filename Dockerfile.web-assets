@@ -7,8 +7,9 @@ COPY web/index.html web/tsconfig.json web/tsconfig.node.json web/vite.config.ts 
 COPY web/src ./src
 RUN npm run build
 
-FROM nginx:alpine
+FROM nginxinc/nginx-unprivileged:alpine
 
 COPY --from=build /web/dist /usr/share/nginx/html
-EXPOSE 80
-HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1
+EXPOSE 8080
+USER nginx
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1:8080/ >/dev/null || exit 1

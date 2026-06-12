@@ -56,7 +56,7 @@ jobs:
         run: make web-typecheck web-build
 
       - name: Run native Go tests
-        run: make native-go-test native-vuln-scan-test native-ci-contract-test
+        run: make native-go-test native-vuln-scan-test native-ci-contract-test native-live-supply-chain-test
 
       - name: Run Rust gateway tests
         run: make native-rust-test
@@ -83,7 +83,7 @@ jobs:
         run: make native-incident-workflow-sample
 
       - name: Validate CI contract
-        run: make native-ci-contract-sample
+        run: make native-ci-contract-live
 
       - name: Refresh evaluation index
         run: make evaluation-index-sample

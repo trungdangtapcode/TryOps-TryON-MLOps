@@ -13,6 +13,7 @@ func parseConfig() Config {
 	flag.StringVar(&cfg.MakefilePath, "makefile", getenv("TRYOPS_CI_CONTRACT_MAKEFILE", "Makefile"), "Makefile path")
 	flag.StringVar(&cfg.VulnerabilityPath, "vulnerability", getenv("TRYOPS_CI_CONTRACT_VULN", "artifacts/eval/security/vulnerability_scan_report.json"), "vulnerability report path")
 	flag.StringVar(&cfg.SupplyChainPath, "supply-chain", getenv("TRYOPS_CI_CONTRACT_SUPPLY", "artifacts/eval/supply_chain/supply_chain_report.json"), "supply-chain report path")
+	flag.StringVar(&cfg.LiveSupplyChainPath, "live-supply-chain", getenv("TRYOPS_CI_CONTRACT_LIVE_SUPPLY", "artifacts/eval/ci/live_supply_chain_report.json"), "live Syft/Trivy/Cosign evidence path")
 	flag.StringVar(&cfg.ContainerReportPath, "container", getenv("TRYOPS_CI_CONTRACT_CONTAINER", "artifacts/eval/containers/native_container_contract_report.json"), "container contract report path")
 	flag.StringVar(&cfg.OutputPath, "output", getenv("TRYOPS_CI_CONTRACT_OUTPUT", "artifacts/eval/ci/native_ci_contract.json"), "JSON report output path")
 	flag.Parse()

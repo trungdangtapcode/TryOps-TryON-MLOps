@@ -12,7 +12,7 @@ Run:
 make supply-chain-sample
 make model-supply-chain-sample
 make native-dependency-lock-contract-sample
-make native-ci-contract-sample
+make native-ci-contract-live
 ```
 
 Artifacts:
@@ -22,6 +22,8 @@ uv.lock
 requirements.lock
 artifacts/eval/supply_chain/dependency_lock.json
 artifacts/eval/supply_chain/sbom.spdx.json
+artifacts/eval/ci/live_supply_chain_report.json
+artifacts/eval/ci/native_ci_contract.json
 artifacts/eval/supply_chain/supply_chain_report.json
 artifacts/eval/dependencies/native_dependency_lock_contract.json
 artifacts/eval/model_supply_chain/model_supply_chain_report.json
@@ -54,6 +56,8 @@ artifacts/eval/ci/native_ci_contract.json
 - Python, C++, and Rego promotion gates requiring a passing model artifact scan and model provenance.
 - GitHub Actions CI contract for language tests, seven container image roles, Syft SBOM generation,
   Trivy HIGH/CRITICAL scan gating, uploaded evidence artifacts, and Cosign keyless signing.
+- Native live supply-chain evidence from pinned Syft, Trivy, and Cosign containers, with a signed
+  SPDX SBOM blob verified locally before the CI contract can report production readiness.
 
 ## Current Tooling Status
 
@@ -64,23 +68,28 @@ artifacts/eval/ci/native_ci_contract.json
 - `artifacts/eval/security/vulnerability_scan_report.json`
 - `artifacts/eval/security/npm_audit_web.json`
 
-The latest local run found 0 npm vulnerabilities, but coverage is still `partial` and
-`production_ready=false`. Syft, Trivy, Grype, pip-audit, gitleaks, osv-scanner, and Cosign are not
-installed in this workspace, so the local fallback SBOM plus npm audit is not a replacement for a
-production Syft/Trivy or Trivy-only pipeline.
+The latest local `vulnerability-scan-sample` run found 0 npm vulnerabilities, but that specific
+fallback report remains `coverage=partial` and `production_ready=false` because it only runs tools
+installed on the host. It remains useful as a fast local smoke check and explicit missing-tool
+inventory.
 
 PA062 CI wiring now exists in `.github/workflows/ci.yml`. The workflow builds the seven declared
 image roles, requests GitHub OIDC permissions, uploads evidence artifacts, generates Syft SPDX SBOMs,
 fails on HIGH/CRITICAL Trivy image findings, and signs pushed images with Cosign keyless identity on
-non-PR runs. `make native-ci-contract-sample` validates that contract locally and emits
-`tryops.native_ci_contract.v1`; its current local status is `production_ready=false` because Syft,
-Trivy, and Cosign are not installed here.
+non-PR runs. `make native-live-supply-chain-sample` executes `anchore/syft:v1.45.1`,
+`aquasec/trivy:0.71.0`, and `ghcr.io/sigstore/cosign/cosign:v2.4.1` as pinned containers, so host
+PATH installation is not required. The latest live report is `tryops.live_supply_chain.v1` with 613
+Syft packages, 0 HIGH/CRITICAL Trivy vulnerability/misconfiguration/secret findings, and a verified
+Cosign signature over `artifacts/eval/ci/syft/filesystem.spdx.json`. `make native-ci-contract-live`
+validates the full contract locally and emits `tryops.native_ci_contract.v1` with
+`production_ready=true`.
 
 Preferred production commands:
 
 ```bash
 syft . -o spdx-json=artifacts/eval/supply_chain/syft.spdx.json
 trivy fs --scanners vuln,secret,config,license --format json .
+make native-ci-contract-live
 ```
 
 Syft is the preferred open-source SBOM generator for filesystems and supports SPDX/CycloneDX output.
@@ -127,10 +136,9 @@ See `docs/model_supply_chain.md` for the exact schema and policy contract.
 
 ## Residual Risk
 
-The local report proves that the repo can generate lock, SBOM, model-source, dataset-license,
-model-artifact serialization/provenance evidence, and a partial installed-tool vulnerability scan.
-It does not prove that no CVEs exist across Python, containers, OS packages, or infrastructure in
-this workspace. PA062/J010 remain partial until the GitHub Actions workflow or local environment
-executes Syft, Trivy, and Cosign and archives those artifacts. The current model signature is local
-offline evidence; production Sigstore keyless OIDC and Rekor transparency-log inclusion still require
-OpenSSF Model Signing / Sigstore tooling.
+The local reports now prove that the repo can generate lock, SBOM, model-source, dataset-license,
+model-artifact serialization/provenance evidence, a partial installed-tool vulnerability scan, and
+live Syft/Trivy/Cosign execution through pinned containers. Residual risk remains for optional
+secondary scanners (Grype, pip-audit, gitleaks, osv-scanner) and for public keyless model
+transparency: the current model signature is local offline evidence; production Sigstore keyless OIDC
+and Rekor transparency-log inclusion still require OpenSSF Model Signing / Sigstore tooling.

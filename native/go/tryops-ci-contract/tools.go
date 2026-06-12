@@ -32,3 +32,19 @@ func missingRequiredTools(tools []ToolStatus) []string {
 	}
 	return missing
 }
+
+func filterMissingForLiveSupplyChain(missing []string) []string {
+	covered := map[string]bool{
+		"syft":   true,
+		"trivy":  true,
+		"cosign": true,
+	}
+	filtered := make([]string, 0, len(missing))
+	for _, name := range missing {
+		if covered[name] {
+			continue
+		}
+		filtered = append(filtered, name)
+	}
+	return filtered
+}

@@ -22,5 +22,9 @@ COPY --from=go-build /out/tryops_benchmark /usr/local/bin/tryops_benchmark
 COPY --from=gateway-build /build/target/release/tryops-gateway /usr/local/bin/tryops-gateway
 RUN pip install --no-cache-dir fastapi uvicorn prometheus-client
 ENV PYTHONPATH=/app/src
+RUN addgroup --system tryops && adduser --system --ingroup tryops --home /nonexistent --no-create-home tryops \
+    && mkdir -p /tmp/tryops-benchmark-output \
+    && chown -R tryops:tryops /tmp/tryops-benchmark-output
+USER tryops
 ENTRYPOINT ["tryops_benchmark"]
 CMD ["--gateway-bin", "/usr/local/bin/tryops-gateway", "--python-bin", "python", "--output", "/tmp/tryops-benchmark-output/native_gateway_benchmark.json"]

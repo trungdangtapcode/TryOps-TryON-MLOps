@@ -9,4 +9,5 @@ FROM scratch
 
 COPY --from=build /out/tryops_guardrail /tryops_guardrail
 EXPOSE 18083
+USER 65532:65532
 ENTRYPOINT ["/tryops_guardrail", "serve"]

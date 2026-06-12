@@ -18,7 +18,9 @@ FROM debian:bookworm-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system tryops \
+    && useradd --system --gid tryops --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin tryops
 
 COPY --from=builder /build/target/release/tryops-gateway /usr/local/bin/tryops-gateway
 COPY --from=web-builder /web/dist /opt/tryops/web
@@ -26,5 +28,6 @@ COPY configs/api_keys.json /opt/tryops/configs/api_keys.json
 ENV TRYOPS_GATEWAY_STATIC_DIR=/opt/tryops/web
 ENV TRYOPS_GATEWAY_API_KEYS_PATH=/opt/tryops/configs/api_keys.json
 EXPOSE 8081
+USER tryops
 
 CMD ["tryops-gateway"]

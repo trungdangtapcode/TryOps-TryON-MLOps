@@ -109,6 +109,12 @@ func TestCategoryForPath(t *testing.T) {
 	if ciCategory != "governance" {
 		t.Fatalf("unexpected ci category: %q", ciCategory)
 	}
+	liveSupplyChainCategory := categoryForPath("artifacts/eval/ci/live_supply_chain_report.json", map[string]interface{}{
+		"schema_version": "tryops.live_supply_chain.v1",
+	})
+	if liveSupplyChainCategory != "governance" {
+		t.Fatalf("unexpected live supply-chain category: %q", liveSupplyChainCategory)
+	}
 	dependencyCategory := categoryForPath("artifacts/eval/dependencies/native_dependency_lock_contract.json", map[string]interface{}{
 		"schema_version": "tryops.native_dependency_lock_contract.v1",
 	})
@@ -126,6 +132,25 @@ func TestCategoryForPath(t *testing.T) {
 	})
 	if quotaCategory != "platform" {
 		t.Fatalf("unexpected quota category: %q", quotaCategory)
+	}
+}
+
+func TestSummaryLiveSupplyChain(t *testing.T) {
+	items := summaryLiveSupplyChain(map[string]interface{}{
+		"passed":           true,
+		"production_ready": true,
+		"syft": map[string]interface{}{
+			"package_count": float64(614),
+		},
+		"trivy": map[string]interface{}{
+			"total_high_critical": float64(0),
+		},
+		"cosign": map[string]interface{}{
+			"verified": true,
+		},
+	})
+	if len(items) != 5 || items[2].Value != "614" || items[3].Value != "0" || items[4].Value != "true" {
+		t.Fatalf("unexpected live supply-chain summary: %#v", items)
 	}
 }
 

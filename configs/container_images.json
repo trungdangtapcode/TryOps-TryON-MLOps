@@ -77,7 +77,7 @@
       "compose_service": "web-assets",
       "required_stage": "node",
       "source_paths": ["web/src", "web/package.json", "web/vite.config.ts"],
-      "ports": [80]
+      "ports": [8080]
     }
   ]
 }
