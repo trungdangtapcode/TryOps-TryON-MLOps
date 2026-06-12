@@ -73,7 +73,7 @@ class ApiContractTests(unittest.TestCase):
             self.assertEqual(clean["model_alias"], "champion")
             self.assertEqual(clean["user_id"], "anonymous")
             self.assertEqual(clean["quota_plan"], "free")
-            self.assertEqual(clean["timeout_ms"], 30000)
+            self.assertEqual(clean["timeout_ms"], 300000)
             self.assertEqual(clean["output_image_path"], str(output))
 
     def test_structured_error_and_request_id_contract(self) -> None:

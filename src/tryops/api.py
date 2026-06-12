@@ -41,6 +41,7 @@ from tryops.native_experiment_stats import analyze_with_native_experiment_stats
 from tryops.observability import record_api_observation, render_prometheus_metrics, sanitize_payload_metadata
 from tryops.pipelines.llm_baseline import estimate_tokens, generate_baseline_response
 from tryops.pipelines.vton_baseline import run_naive_overlay_baseline
+from tryops.pipelines.vton_remote import RealVtonUnavailableError, run_remote_fashn_vton
 from tryops.policy import evaluate_promotion
 from tryops.quota import check_and_record_quota
 from tryops.quota_read_model import load_quota_read_model
@@ -250,6 +251,7 @@ def create_app() -> Any:
             plan=clean["quota_plan"],
             workload="vton",
             request_units=1,
+            record=False,
         )
         if not quota["allowed"]:
             response = structured_error(
@@ -275,11 +277,9 @@ def create_app() -> Any:
             return response
         try:
             report = run_with_timeout(
-                lambda: run_naive_overlay_baseline(
-                    person_image_path=clean["person_image_path"],
-                    garment_image_path=clean["garment_image_path"],
-                    output_image_path=clean["output_image_path"],
-                    cache_dir=clean["cache_dir"],
+                lambda: _run_vton_adapter(
+                    adapter=adapter,
+                    clean=clean,
                 ),
                 timeout_ms=clean["timeout_ms"],
                 operation_name="vton-infer",
@@ -293,6 +293,12 @@ def create_app() -> Any:
                 report["metrics"]["native_quality_score"] = native_vton["quality_score"]
             report["metrics"]["native_image_quality"] = native_vton["image_metrics"]
             _write_vton_report_sidecar(report)
+            quota = check_and_record_quota(
+                user_id=clean["user_id"],
+                plan=clean["quota_plan"],
+                workload="vton",
+                request_units=1,
+            )
             response = {
                 "status": "completed",
                 "adapter": adapter,
@@ -315,6 +321,18 @@ def create_app() -> Any:
                 code="timeout_exceeded",
                 message="VTON inference timed out",
                 details=timeout_details(exc),
+                workload="vton",
+            )
+            response["routing"] = routing
+            response["quota"] = quota
+            _record(endpoint, request_id, "vton", routing["primary_alias"], started, payload, response)
+            return response
+        except RealVtonUnavailableError as exc:
+            response = structured_error(
+                request_id=request_id,
+                code="real_vton_unavailable",
+                message=str(exc),
+                details=[{"field": "model_alias", "message": "use baseline only for diagnostics"}],
                 workload="vton",
             )
             response["routing"] = routing
@@ -958,6 +976,31 @@ def _store_vton_upload(payload: dict[str, Any]) -> dict[str, Any]:
         "width": image.width,
         "height": image.height,
     }
+
+
+def _run_vton_adapter(*, adapter: str, clean: dict[str, Any]) -> dict[str, Any]:
+    if adapter == "naive-overlay-vton":
+        return run_naive_overlay_baseline(
+            person_image_path=clean["person_image_path"],
+            garment_image_path=clean["garment_image_path"],
+            output_image_path=clean["output_image_path"],
+            cache_dir=clean.get("cache_dir", "artifacts/cache/vton_preflight"),
+        )
+    if adapter == "fashn-vton-http":
+        return run_remote_fashn_vton(
+            person_image_path=clean["person_image_path"],
+            garment_image_path=clean["garment_image_path"],
+            output_image_path=clean["output_image_path"],
+            cache_dir=clean.get("cache_dir", "artifacts/cache/vton_preflight"),
+            timeout_ms=clean["timeout_ms"],
+            category=clean["category"],
+            garment_photo_type=clean["garment_photo_type"],
+            num_timesteps=clean["num_timesteps"],
+            guidance_scale=clean["guidance_scale"],
+            seed=clean["seed"],
+            segmentation_free=clean["segmentation_free"],
+        )
+    raise ValueError(f"unsupported VTON adapter '{adapter}'")
 
 
 def _optional_json_artifact(path: str) -> dict[str, Any]:

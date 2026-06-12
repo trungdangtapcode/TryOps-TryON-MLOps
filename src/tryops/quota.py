@@ -46,7 +46,13 @@ class UsageQuotaLedger:
     def __init__(self) -> None:
         self._usage: dict[tuple[str, str, str], int] = defaultdict(int)
 
-    def check_and_record(self, request: QuotaRequest, *, now: datetime | None = None) -> dict[str, Any]:
+    def check_and_record(
+        self,
+        request: QuotaRequest,
+        *,
+        now: datetime | None = None,
+        record: bool = True,
+    ) -> dict[str, Any]:
         if request.plan not in SUPPORTED_QUOTA_PLANS:
             raise ValueError(f"unsupported quota plan '{request.plan}'")
         if request.workload not in {"llm", "vton"}:
@@ -73,7 +79,7 @@ class UsageQuotaLedger:
             )
 
         allowed = all(check["allowed"] for check in checks)
-        if allowed:
+        if allowed and record:
             for check in checks:
                 key = (period, _user_hash(request.user_id), str(check["dimension"]))
                 self._usage[key] += int(check["increment"])
@@ -88,15 +94,16 @@ class UsageQuotaLedger:
             "checks": [
                 {
                     **check,
-                    "used_after": check["used"] + check["increment"] if allowed else check["used"],
+                    "used_after": check["used"] + check["increment"] if allowed and record else check["used"],
                     "remaining_after": (
                         max(0, check["limit"] - check["used"] - check["increment"])
-                        if allowed
+                        if allowed and record
                         else max(0, check["limit"] - check["used"])
                     ),
                 }
                 for check in checks
             ],
+            "recorded": bool(allowed and record),
             "reason": "within_quota" if allowed else "quota_exceeded",
         }
 
@@ -128,16 +135,19 @@ def check_and_record_quota(
     workload: str,
     request_units: int = 1,
     estimated_tokens: int = 0,
+    record: bool = True,
 ) -> dict[str, Any]:
-    gateway_decision = _check_gateway_quota(
-        user_id=user_id,
-        plan=plan,
-        workload=workload,
-        request_units=request_units,
-        estimated_tokens=estimated_tokens,
-    )
-    if gateway_decision is not None:
-        return gateway_decision
+    if record:
+        gateway_decision = _check_gateway_quota(
+            user_id=user_id,
+            plan=plan,
+            workload=workload,
+            request_units=request_units,
+            estimated_tokens=estimated_tokens,
+        )
+        if gateway_decision is not None:
+            gateway_decision.setdefault("recorded", bool(gateway_decision.get("allowed")))
+            return gateway_decision
     return GLOBAL_QUOTA_LEDGER.check_and_record(
         QuotaRequest(
             user_id=user_id,
@@ -145,7 +155,8 @@ def check_and_record_quota(
             workload=workload,
             request_units=request_units,
             estimated_tokens=estimated_tokens,
-        )
+        ),
+        record=record,
     )
 
 

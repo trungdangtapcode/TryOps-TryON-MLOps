@@ -203,8 +203,11 @@ services:
       TRYOPS_ENV: local
       MLFLOW_TRACKING_URI: http://mlflow:5000
       TRYOPS_GUARDRAIL_URL: http://guardrail:18083/v1/guardrails/evaluate
+      TRYOPS_REAL_VTON_URL: ${TRYOPS_REAL_VTON_URL:-http://host.docker.internal:18101}
       TRYOPS_STRUCTURED_LOG_PATH: /app/artifacts/logs/api_events.jsonl
       TRYOPS_TRACE_SPAN_PATH: /app/artifacts/traces/api_spans.jsonl
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${TRYOPS_API_PORT:-8080}:8080"
     volumes:

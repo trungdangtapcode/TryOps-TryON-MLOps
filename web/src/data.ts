@@ -31,7 +31,8 @@ export const navItems: NavItem[] = [
 export const llmVariants = ["baseline", "champion", "challenger", "candidate"];
 export const quotaPlans = ["free", "team", "enterprise"];
 export const vtonAliases = [
-  { value: "baseline", label: "Baseline compositor" }
+  { value: "champion", label: "FASHN VTON 1.5 GPU" },
+  { value: "baseline", label: "Diagnostic compositor" }
 ];
 
 export const experimentVariants = [

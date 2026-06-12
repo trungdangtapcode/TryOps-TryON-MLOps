@@ -1,5 +1,7 @@
 # TryOps
 
+tryops-viewer-demo-key
+
 Enterprise open-source MLOps product for Virtual Try-On, optimized LLM serving, quota enforcement, native guardrails, governance evidence, and production operations.
 
 The repo is intentionally native-first at the production boundary:

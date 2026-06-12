@@ -9,9 +9,9 @@ from tryops.pipelines.llm_baseline import SUPPORTED_MODEL_ALIASES as SUPPORTED_L
 
 SUPPORTED_VTON_ALIASES = {
     "baseline": "naive-overlay-vton",
-    "champion": "naive-overlay-vton",
-    "challenger": "naive-overlay-vton",
-    "candidate": "naive-overlay-vton",
+    "champion": "fashn-vton-http",
+    "challenger": "fashn-vton-http",
+    "candidate": "fashn-vton-http",
 }
 
 

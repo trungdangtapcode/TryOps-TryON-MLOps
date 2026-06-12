@@ -19,8 +19,15 @@ TRYOPS_VAULT_DEV_TOKEN ?= tryops-dev-root-token
 TRYOPS_SYFT_IMAGE ?= anchore/syft:v1.45.1
 TRYOPS_TRIVY_IMAGE ?= aquasec/trivy:0.71.0
 TRYOPS_COSIGN_IMAGE ?= ghcr.io/sigstore/cosign/cosign:v2.4.1
+FASHN_VTON_REPO ?= artifacts/external/fashn-vton-1.5
+FASHN_VTON_VENV ?= artifacts/venvs/fashn-vton
+FASHN_VTON_PYTHON ?= $(FASHN_VTON_VENV)/bin/python
+FASHN_VTON_WEIGHTS_DIR ?= artifacts/models/fashn-vton-1.5
+FASHN_VTON_HOST ?= 0.0.0.0
+FASHN_VTON_PORT ?= 18101
 
 .PHONY: native-gguf-preflight-build native-gguf-preflight-test llm-gguf-preflight-sample
+.PHONY: fashn-vton-venv fashn-vton-download fashn-vton-service fashn-vton-sample
 .PHONY: native-trace-envelope-cpp-build native-trace-envelope-cpp-test native-trace-envelope-build native-trace-envelope-test native-trace-envelope-sample
 .PHONY: native-container-contract-build native-container-contract-test native-container-contract-sample
 .PHONY: native-distributed-quota-build native-distributed-quota-test native-distributed-quota-smoke
@@ -1392,6 +1399,31 @@ vton-real-sample: native-vton-preprocess-build native-image-metrics-build
 	PYTHONPATH=$(PYTHONPATH) python scripts/create_synthetic_vton_demo.py --output-dir artifacts/demo/vton
 	PYTHONPATH=$(PYTHONPATH) python scripts/run_vton_real.py artifacts/demo/vton/person.png artifacts/demo/vton/garment.png --output artifacts/demo/vton/real_output.png --prompt "a person wearing a blue striped shirt, photorealistic" --steps 25
 	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_image_metrics.py artifacts/demo/vton/person.png artifacts/demo/vton/real_output.png --cli artifacts/native/tryops_image_metrics_cli
+
+fashn-vton-venv:
+	@set -eu; \
+	if [ ! -x "$(FASHN_VTON_PYTHON)" ]; then \
+		python3 -m venv "$(FASHN_VTON_VENV)"; \
+	fi; \
+	"$(FASHN_VTON_PYTHON)" -m pip install --upgrade pip; \
+	if [ ! -d "$(FASHN_VTON_REPO)" ]; then \
+		git clone https://github.com/fashn-AI/fashn-vton-1.5.git "$(FASHN_VTON_REPO)"; \
+	fi; \
+	"$(FASHN_VTON_PYTHON)" -m pip install -e "$(FASHN_VTON_REPO)" --no-deps; \
+	"$(FASHN_VTON_PYTHON)" -m pip install torchvision onnxruntime-gpu einops fashn-human-parser matplotlib
+
+fashn-vton-download: fashn-vton-venv
+	"$(FASHN_VTON_PYTHON)" "$(FASHN_VTON_REPO)/scripts/download_weights.py" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
+
+fashn-vton-service:
+	@test -x "$(FASHN_VTON_PYTHON)" || { echo "missing $(FASHN_VTON_PYTHON); run: make fashn-vton-venv"; exit 1; }
+	@test -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" || { echo "missing FASHN weights; run: make fashn-vton-download"; exit 1; }
+	"$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton.py --host "$(FASHN_VTON_HOST)" --port "$(FASHN_VTON_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
+
+fashn-vton-sample:
+	@test -x "$(FASHN_VTON_PYTHON)" || { echo "missing $(FASHN_VTON_PYTHON); run: make fashn-vton-venv"; exit 1; }
+	@test -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" || { echo "missing FASHN weights; run: make fashn-vton-download"; exit 1; }
+	"$(FASHN_VTON_PYTHON)" scripts/run_fashn_vton_single.py --person test/model1.png --garment test/garment1.png --output test/fashn_vton_model1_garment1.png --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)" --category tops --garment-photo-type model --num-timesteps 50 --guidance-scale 1.5 --seed 555
 
 db-init:
 	PYTHONPATH=$(PYTHONPATH) python -c "from tryops import db; db.init_db(); print('tryops.db initialized')"

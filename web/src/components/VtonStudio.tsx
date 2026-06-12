@@ -15,7 +15,7 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
   const [personPath, setPersonPath] = useState("artifacts/demo/vton/person.png");
   const [garmentPath, setGarmentPath] = useState("artifacts/demo/vton/garment.png");
   const [outputPath, setOutputPath] = useState("artifacts/runtime/vton/console-output.png");
-  const [modelAlias, setModelAlias] = useState("baseline");
+  const [modelAlias, setModelAlias] = useState("champion");
   const [quotaPlan, setQuotaPlan] = useState("free");
   const [personPreview, setPersonPreview] = useState<string | undefined>();
   const [garmentPreview, setGarmentPreview] = useState<string | undefined>();
@@ -64,7 +64,14 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
         output_image_path: outputPath,
         model_alias: modelAlias,
         user_id: "console-user",
-        quota_plan: quotaPlan
+        quota_plan: quotaPlan,
+        category: "tops",
+        garment_photo_type: "model",
+        num_timesteps: 50,
+        guidance_scale: 1.5,
+        seed: 555,
+        segmentation_free: true,
+        timeout_ms: 300000
       });
       setResult(response);
       onMutate();

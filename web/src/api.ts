@@ -46,6 +46,13 @@ export interface VtonPayload {
   model_alias: string;
   user_id: string;
   quota_plan: string;
+  category?: "tops" | "bottoms" | "one-pieces";
+  garment_photo_type?: "model" | "flat-lay";
+  num_timesteps?: number;
+  guidance_scale?: number;
+  seed?: number;
+  segmentation_free?: boolean;
+  timeout_ms?: number;
 }
 
 export interface VtonUploadPayload {

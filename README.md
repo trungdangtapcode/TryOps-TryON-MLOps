@@ -37,6 +37,38 @@ Stop it:
 make app-down
 ```
 
+### Real VTON Model
+
+The production VTON target uses the open-source FASHN VTON v1.5 model. It runs as a host GPU service, then the Docker app calls it through `host.docker.internal`.
+
+One-time setup:
+
+```bash
+make fashn-vton-download
+```
+
+Start the model service in one terminal:
+
+```bash
+make fashn-vton-service
+```
+
+This binds the model service on port `18101` so Docker can reach it through `host.docker.internal`.
+
+Start the app in another terminal:
+
+```bash
+make app-up
+```
+
+Then open `http://127.0.0.1:18081`, enter `tryops-viewer-demo-key`, go to VTON Studio, upload a person image and garment image, keep `FASHN VTON 1.5 GPU` selected, and press Run. The generated image is saved to the output path shown in the UI, usually `artifacts/runtime/vton/console-output.png`.
+
+Quick local model check without the app:
+
+```bash
+make fashn-vton-sample
+```
+
 For frontend development:
 
 ```bash
@@ -174,7 +206,8 @@ Real model runs are optional and need ML extras plus suitable hardware:
 
 ```bash
 python -m pip install -e ".[dev,ml]"
-make vton-real-sample
+make fashn-vton-download
+make fashn-vton-service
 make llm-real-sample
 ```
 
@@ -197,6 +230,85 @@ artifacts/           Generated local outputs, ignored by Git
 reports/generated/   Generated cards/reports, ignored by Git
 ```
 
+
+
+```mermaid
+flowchart LR
+  browser["Browser"]
+
+  subgraph host["Host ports from make app-up"]
+    h_gateway["18081<br/>Console + gateway"]
+    h_api["18080<br/>FastAPI direct"]
+    h_pg["15432<br/>Postgres"]
+    h_valkey["16379<br/>Valkey"]
+    h_minio_api["19000<br/>MinIO API"]
+    h_minio_console["19001<br/>MinIO Console"]
+    h_mlflow["15000<br/>MLflow"]
+    h_prom["19090<br/>Prometheus"]
+    h_alert["19093<br/>Alertmanager"]
+    h_grafana["13000<br/>Grafana"]
+    h_guardrail["18093<br/>Go guardrail"]
+    h_otel_grpc["4317<br/>OTel gRPC"]
+    h_otel_http["4318<br/>OTel HTTP"]
+    h_otel_metrics["8888<br/>OTel metrics"]
+    h_otel_health["13133<br/>OTel health"]
+  end
+
+  subgraph compose["Compose network"]
+    gateway["gateway:8081<br/>Rust gateway"]
+    api["api:8080<br/>FastAPI BFF"]
+    postgres["postgres:5432"]
+    valkey["valkey:6379"]
+    minio["minio:9000/9001"]
+    mlflow["mlflow:5000"]
+    prometheus["prometheus:9090"]
+    alertmanager["alertmanager:9093"]
+    grafana["grafana:3000"]
+    guardrail["guardrail:18083"]
+    otel["otel-collector:4317/4318"]
+  end
+
+  subgraph dev["Dev-only"]
+    vite["15173<br/>Vite dev server"]
+    uvicorn["18180<br/>Manual Uvicorn"]
+  end
+
+  subgraph profiles["Profile-only"]
+    controller["18082<br/>Go controller ops profile"]
+    tls["8443<br/>Gateway TLS profile"]
+    assets["8088<br/>Web assets profile"]
+  end
+
+  browser --> h_gateway --> gateway
+  browser -. frontend dev .-> vite
+  vite --> uvicorn
+
+  h_api --> api
+  h_pg --> postgres
+  h_valkey --> valkey
+  h_minio_api --> minio
+  h_minio_console --> minio
+  h_mlflow --> mlflow
+  h_prom --> prometheus
+  h_alert --> alertmanager
+  h_grafana --> grafana
+  h_guardrail --> guardrail
+  h_otel_grpc --> otel
+  h_otel_http --> otel
+  h_otel_metrics --> otel
+  h_otel_health --> otel
+
+  gateway --> api
+  gateway --> guardrail
+  gateway --> postgres
+  gateway --> valkey
+  api --> mlflow
+  api --> minio
+  prometheus --> alertmanager
+  alertmanager -. page alerts .-> controller
+```
+
+
 ## Main Ports
 
 When using `make app-up`:
@@ -204,11 +316,19 @@ When using `make app-up`:
 ```text
 Console + gateway: http://127.0.0.1:18081
 FastAPI direct:    http://127.0.0.1:18080
+FASHN VTON model:  http://127.0.0.1:18101
 Grafana:           http://127.0.0.1:13000
 Prometheus:        http://127.0.0.1:19090
 MLflow:            http://127.0.0.1:15000
 MinIO API:         http://127.0.0.1:19000
 MinIO Console:     http://127.0.0.1:19001
+```
+
+If port `18101` conflicts, start the model service on another port and point the app at it:
+
+```bash
+FASHN_VTON_PORT=18111 make fashn-vton-service
+TRYOPS_REAL_VTON_URL=http://host.docker.internal:18111 make app-up
 ```
 
 ## Deeper Docs

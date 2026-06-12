@@ -21,8 +21,11 @@ SUPPORTED_API_VERSIONS = ["v1"]
 MAX_PROMPT_CHARS = 8000
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
 DEFAULT_TIMEOUT_MS = 30_000
+DEFAULT_VTON_TIMEOUT_MS = 300_000
 MAX_TIMEOUT_MS = 300_000
 SUPPORTED_IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg"}
+SUPPORTED_VTON_CATEGORIES = {"tops", "bottoms", "one-pieces"}
+SUPPORTED_VTON_GARMENT_PHOTO_TYPES = {"model", "flat-lay"}
 
 
 def request_id_from_payload(payload: dict[str, Any]) -> str:
@@ -74,6 +77,11 @@ def readiness_state() -> dict[str, Any]:
         "components": {
             "api": {"status": "ready"},
             "vton_baseline": {"status": "ready", "adapter": "naive-overlay-vton"},
+            "vton_fashn": {
+                "status": "configured" if "TRYOPS_REAL_VTON_URL" in os.environ else "external_service_required",
+                "adapter": "fashn-vton-http",
+                "reason": "start the host GPU service with `make fashn-vton-service` for champion VTON",
+            },
             "llm_baseline": {"status": "ready", "adapter": "tryops-rule-baseline"},
             "registry": {"status": "degraded", "reason": "local file-backed registry only"},
             "rust_gateway": {
@@ -97,7 +105,7 @@ def validate_llm_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[
     elif len(prompt) > MAX_PROMPT_CHARS:
         errors.append({"field": "prompt", "message": f"prompt must be at most {MAX_PROMPT_CHARS} characters"})
 
-    model_alias = str(payload.get("model_alias", "baseline"))
+    model_alias = str(payload.get("model_alias", "champion"))
     if model_alias not in SUPPORTED_MODEL_ALIASES:
         errors.append({"field": "model_alias", "message": f"unsupported alias '{model_alias}'"})
 
@@ -253,7 +261,42 @@ def validate_vton_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list
     if quota_plan not in SUPPORTED_QUOTA_PLANS:
         errors.append({"field": "quota_plan", "message": f"quota_plan must be one of {sorted(SUPPORTED_QUOTA_PLANS)}"})
 
-    timeout_ms_int = _validate_timeout_ms(payload, errors)
+    timeout_ms_int = _validate_timeout_ms(payload, errors, default_ms=DEFAULT_VTON_TIMEOUT_MS)
+    category = str(payload.get("category", "tops")).strip().lower() or "tops"
+    if category not in SUPPORTED_VTON_CATEGORIES:
+        errors.append({"field": "category", "message": "category must be 'tops', 'bottoms', or 'one-pieces'"})
+
+    garment_photo_type = str(payload.get("garment_photo_type", "model")).strip().lower() or "model"
+    if garment_photo_type not in SUPPORTED_VTON_GARMENT_PHOTO_TYPES:
+        errors.append({"field": "garment_photo_type", "message": "garment_photo_type must be 'model' or 'flat-lay'"})
+
+    num_timesteps = _validate_int_range(
+        payload,
+        errors,
+        field="num_timesteps",
+        default=50,
+        minimum=10,
+        maximum=80,
+    )
+    guidance_scale = _validate_float_range(
+        payload,
+        errors,
+        field="guidance_scale",
+        default=1.5,
+        minimum=0.1,
+        maximum=10.0,
+    )
+    seed = _validate_int_range(
+        payload,
+        errors,
+        field="seed",
+        default=555,
+        minimum=0,
+        maximum=2_147_483_647,
+    )
+    segmentation_free = payload.get("segmentation_free", True)
+    if not isinstance(segmentation_free, bool):
+        errors.append({"field": "segmentation_free", "message": "segmentation_free must be a boolean"})
 
     return (
         {
@@ -267,13 +310,24 @@ def validate_vton_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list
             "user_id": user_id,
             "quota_plan": quota_plan,
             "timeout_ms": timeout_ms_int,
+            "category": category,
+            "garment_photo_type": garment_photo_type,
+            "num_timesteps": num_timesteps,
+            "guidance_scale": guidance_scale,
+            "seed": seed,
+            "segmentation_free": segmentation_free if isinstance(segmentation_free, bool) else True,
         },
         errors,
     )
 
 
-def _validate_timeout_ms(payload: dict[str, Any], errors: list[dict[str, str]]) -> int:
-    timeout_ms = payload.get("timeout_ms", DEFAULT_TIMEOUT_MS)
+def _validate_timeout_ms(
+    payload: dict[str, Any],
+    errors: list[dict[str, str]],
+    *,
+    default_ms: int = DEFAULT_TIMEOUT_MS,
+) -> int:
+    timeout_ms = payload.get("timeout_ms", default_ms)
     try:
         timeout_ms_int = int(timeout_ms)
     except (TypeError, ValueError):
@@ -282,6 +336,46 @@ def _validate_timeout_ms(payload: dict[str, Any], errors: list[dict[str, str]]) 
     if timeout_ms_int < 1 or timeout_ms_int > MAX_TIMEOUT_MS:
         errors.append({"field": "timeout_ms", "message": f"timeout_ms must be between 1 and {MAX_TIMEOUT_MS}"})
     return timeout_ms_int
+
+
+def _validate_int_range(
+    payload: dict[str, Any],
+    errors: list[dict[str, str]],
+    *,
+    field: str,
+    default: int,
+    minimum: int,
+    maximum: int,
+) -> int:
+    raw_value = payload.get(field, default)
+    try:
+        value = int(raw_value)
+    except (TypeError, ValueError):
+        value = minimum - 1
+        errors.append({"field": field, "message": f"{field} must be an integer"})
+    if value < minimum or value > maximum:
+        errors.append({"field": field, "message": f"{field} must be between {minimum} and {maximum}"})
+    return value
+
+
+def _validate_float_range(
+    payload: dict[str, Any],
+    errors: list[dict[str, str]],
+    *,
+    field: str,
+    default: float,
+    minimum: float,
+    maximum: float,
+) -> float:
+    raw_value = payload.get(field, default)
+    try:
+        value = float(raw_value)
+    except (TypeError, ValueError):
+        value = minimum - 1.0
+        errors.append({"field": field, "message": f"{field} must be numeric"})
+    if value < minimum or value > maximum:
+        errors.append({"field": field, "message": f"{field} must be between {minimum} and {maximum}"})
+    return value
 
 
 def _validate_local_image_path(field: str, path: Path, errors: list[dict[str, str]]) -> None:
