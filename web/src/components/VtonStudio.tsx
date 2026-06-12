@@ -15,7 +15,7 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
   const [personPath, setPersonPath] = useState("artifacts/demo/vton/person.png");
   const [garmentPath, setGarmentPath] = useState("artifacts/demo/vton/garment.png");
   const [outputPath, setOutputPath] = useState("artifacts/runtime/vton/console-output.png");
-  const [modelAlias, setModelAlias] = useState("champion");
+  const [modelAlias, setModelAlias] = useState("baseline");
   const [quotaPlan, setQuotaPlan] = useState("free");
   const [personPreview, setPersonPreview] = useState<string | undefined>();
   const [garmentPreview, setGarmentPreview] = useState<string | undefined>();
@@ -33,6 +33,7 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
   const uploadBusy = personUploadBusy || garmentUploadBusy;
   const runOutputPath = vtonOutputPath(result, outputPath);
   const runOutputUrl = client.artifactUrl(runOutputPath);
+  const runModel = vtonModelSummary(result);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,10 +150,10 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
         </div>
         <div className="form-grid">
           <label className="field">
-            <span>Model</span>
+            <span>Execution target</span>
             <select onChange={(event) => setModelAlias(event.target.value)} value={modelAlias}>
               {vtonAliases.map((alias) => (
-                <option key={alias} value={alias}>{alias}</option>
+                <option key={alias.value} value={alias.value}>{alias.label}</option>
               ))}
             </select>
           </label>
@@ -178,8 +179,15 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
         <div className="capacity-stack">
           <MetricTile label="Status" value={result?.status || "idle"} tone={result?.error ? "red" : "green"} />
           <MetricTile label="Quota" value={result?.quota?.allowed === false ? "blocked" : "allowed"} />
+          <MetricTile label="Adapter" value={runModel.adapter} tone={runModel.isBaseline ? "amber" : "green"} />
+          <MetricTile label="Model type" value={runModel.type} tone={runModel.isBaseline ? "amber" : "green"} />
           <MetricTile label="Trace" value={result?.trace?.trace_id?.slice(0, 10) || "-"} />
         </div>
+        {runModel.isBaseline ? (
+          <div className="warning-box">
+            This run used the deterministic baseline compositor, not neural VTON inference.
+          </div>
+        ) : null}
       </aside>
 
       <section className="panel workbench-output">
@@ -279,6 +287,25 @@ function vtonOutputPath(result: VtonResponse | undefined, fallbackPath: string):
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
+}
+
+function vtonModelSummary(result: VtonResponse | undefined): {
+  adapter: string;
+  type: string;
+  isBaseline: boolean;
+} {
+  const model = isRecord(result?.report?.model) ? result?.report?.model : undefined;
+  const adapter = result?.adapter || result?.routing?.primary_adapter || stringValue(model?.name) || "-";
+  const type = stringValue(model?.type) || "-";
+  return {
+    adapter,
+    type,
+    isBaseline: adapter === "naive-overlay-vton" || type === "deterministic_baseline",
+  };
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 type VtonUploadRole = "person" | "garment";

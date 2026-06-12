@@ -214,7 +214,7 @@ def validate_llm_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[
 
 def validate_vton_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
     errors: list[dict[str, str]] = []
-    model_alias = str(payload.get("model_alias", "champion"))
+    model_alias = str(payload.get("model_alias", "baseline"))
     if model_alias not in SUPPORTED_VTON_ALIASES:
         errors.append({"field": "model_alias", "message": f"unsupported alias '{model_alias}'"})
 

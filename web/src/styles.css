@@ -607,6 +607,16 @@ th {
   color: #99312b;
 }
 
+.warning-box {
+  margin: 10px 0 0;
+  padding: 12px;
+  border: 1px solid #ead28a;
+  background: #fff8df;
+  color: #6f4b00;
+  font-size: 0.88rem;
+  font-weight: 750;
+}
+
 .image-input-grid,
 .lane-grid,
 .report-grid,

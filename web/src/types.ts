@@ -416,6 +416,11 @@ export interface LlmGenerationResponse {
 export interface VtonResponse {
   status?: string;
   request_id?: string;
+  adapter?: string;
+  routing?: {
+    primary_alias?: string;
+    primary_adapter?: string;
+  };
   report?: Record<string, unknown>;
   quota?: LlmGenerationResponse["quota"];
   trace?: LlmGenerationResponse["trace"];
