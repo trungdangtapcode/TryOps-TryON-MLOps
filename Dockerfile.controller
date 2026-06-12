@@ -1,0 +1,15 @@
+FROM golang:1.22-alpine AS build
+
+WORKDIR /src
+COPY native/go/tryops-controller/go.mod ./
+COPY native/go/tryops-controller/*.go ./
+RUN CGO_ENABLED=0 GOFLAGS=-mod=mod go build -buildvcs=false -o /out/tryops-controller .
+
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates \
+    && adduser -D -H -u 10001 tryops
+COPY --from=build /out/tryops-controller /usr/local/bin/tryops-controller
+USER 10001:10001
+EXPOSE 18082
+ENTRYPOINT ["tryops-controller"]

@@ -1,0 +1,84 @@
+groups:
+- name: tryops-slo-burn-rate-alerts
+  rules:
+  - alert: TryOpsLlmPageFastBurnRate
+    expr: (tryops_slo_error_ratio{workload="llm",window="1h"} > 0.144000) and (tryops_slo_error_ratio{workload="llm",window="5m"} > 0.144000)
+    for: 2m
+    labels:
+      severity: page
+      workload: llm
+    annotations:
+      summary: llm is burning error budget too quickly
+      runbook_url: docs/service_level_objectives.md
+  - alert: TryOpsLlmPageSlowBurnRate
+    expr: (tryops_slo_error_ratio{workload="llm",window="6h"} > 0.060000) and (tryops_slo_error_ratio{workload="llm",window="30m"} > 0.060000)
+    for: 2m
+    labels:
+      severity: page
+      workload: llm
+    annotations:
+      summary: llm is burning error budget too quickly
+      runbook_url: docs/service_level_objectives.md
+  - alert: TryOpsLlmTicketBurnRate
+    expr: (tryops_slo_error_ratio{workload="llm",window="3d"} > 0.010000) and (tryops_slo_error_ratio{workload="llm",window="6h"} > 0.010000)
+    for: 2m
+    labels:
+      severity: ticket
+      workload: llm
+    annotations:
+      summary: llm is burning error budget too quickly
+      runbook_url: docs/service_level_objectives.md
+  - alert: TryOpsVtonPageFastBurnRate
+    expr: (tryops_slo_error_ratio{workload="vton",window="1h"} > 0.144000) and (tryops_slo_error_ratio{workload="vton",window="5m"} > 0.144000)
+    for: 2m
+    labels:
+      severity: page
+      workload: vton
+    annotations:
+      summary: vton is burning error budget too quickly
+      runbook_url: docs/service_level_objectives.md
+  - alert: TryOpsVtonPageSlowBurnRate
+    expr: (tryops_slo_error_ratio{workload="vton",window="6h"} > 0.060000) and (tryops_slo_error_ratio{workload="vton",window="30m"} > 0.060000)
+    for: 2m
+    labels:
+      severity: page
+      workload: vton
+    annotations:
+      summary: vton is burning error budget too quickly
+      runbook_url: docs/service_level_objectives.md
+  - alert: TryOpsVtonTicketBurnRate
+    expr: (tryops_slo_error_ratio{workload="vton",window="3d"} > 0.010000) and (tryops_slo_error_ratio{workload="vton",window="6h"} > 0.010000)
+    for: 2m
+    labels:
+      severity: ticket
+      workload: vton
+    annotations:
+      summary: vton is burning error budget too quickly
+      runbook_url: docs/service_level_objectives.md
+  - alert: TryOpsControlPlanePageFastBurnRate
+    expr: (tryops_slo_error_ratio{workload="control_plane",window="1h"} > 0.072000) and (tryops_slo_error_ratio{workload="control_plane",window="5m"} > 0.072000)
+    for: 2m
+    labels:
+      severity: page
+      workload: control_plane
+    annotations:
+      summary: control_plane is burning error budget too quickly
+      runbook_url: docs/service_level_objectives.md
+  - alert: TryOpsControlPlanePageSlowBurnRate
+    expr: (tryops_slo_error_ratio{workload="control_plane",window="6h"} > 0.030000) and (tryops_slo_error_ratio{workload="control_plane",window="30m"} > 0.030000)
+    for: 2m
+    labels:
+      severity: page
+      workload: control_plane
+    annotations:
+      summary: control_plane is burning error budget too quickly
+      runbook_url: docs/service_level_objectives.md
+  - alert: TryOpsControlPlaneTicketBurnRate
+    expr: (tryops_slo_error_ratio{workload="control_plane",window="3d"} > 0.005000) and (tryops_slo_error_ratio{workload="control_plane",window="6h"} > 0.005000)
+    for: 2m
+    labels:
+      severity: ticket
+      workload: control_plane
+    annotations:
+      summary: control_plane is burning error budget too quickly
+      runbook_url: docs/service_level_objectives.md

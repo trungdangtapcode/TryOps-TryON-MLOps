@@ -1,0 +1,41 @@
+{
+  "schema_version": "tryops.model_sources.v1",
+  "generated_from_research_date": "2026-06-11",
+  "models": [
+    {
+      "id": "tryops-rule-baseline",
+      "workload": "llm",
+      "role": "local_contract_adapter",
+      "source_type": "local_source",
+      "source_uri": "src/tryops/pipelines/llm_baseline.py",
+      "revision": "local-dev-unversioned",
+      "license": "Apache-2.0",
+      "status": "implemented",
+      "usage": "Dependency-free deterministic adapter for API, benchmark, safety, and promotion contract validation."
+    },
+    {
+      "id": "smollm2-135m-instruct",
+      "workload": "llm",
+      "role": "first_neural_target",
+      "source_type": "huggingface_model",
+      "source_uri": "https://huggingface.co/HuggingFaceTB/SmolLM2-135M-Instruct",
+      "model_id": "HuggingFaceTB/SmolLM2-135M-Instruct",
+      "revision": "12fd25f",
+      "revision_notes": "Short verified commit shown by Hugging Face file tree for the current README update on 2026-06-11.",
+      "license": "Apache-2.0",
+      "status": "pinned_source_not_downloaded",
+      "usage": "First open-source neural LLM target for Transformers or vLLM serving once weights and compatible runtime are available."
+    },
+    {
+      "id": "naive-overlay-vton",
+      "workload": "vton",
+      "role": "local_contract_adapter",
+      "source_type": "local_source",
+      "source_uri": "src/tryops/pipelines/vton_baseline.py",
+      "revision": "local-dev-unversioned",
+      "license": "Apache-2.0",
+      "status": "implemented",
+      "usage": "Dependency-free deterministic VTON adapter for API, preprocessing, lineage, and metric contract validation."
+    }
+  ]
+}

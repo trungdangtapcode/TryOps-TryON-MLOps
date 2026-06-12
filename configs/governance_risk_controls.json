@@ -1,0 +1,156 @@
+{
+  "schema_version": "tryops.governance_risk_controls.v1",
+  "sources": {
+    "nist_ai_rmf": {
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework",
+      "notes": "NIST AI RMF 1.0 is organized around Govern, Map, Measure, and Manage; NIST notes the framework is currently being revised."
+    },
+    "nist_ai_rmf_playbook": {
+      "url": "https://www.nist.gov/itl/ai-risk-management-framework/nist-ai-rmf-playbook",
+      "notes": "The playbook suggests actions for the four AI RMF functions and is updated as guidance evolves."
+    },
+    "owasp_llm_top10_2025": {
+      "url": "https://genai.owasp.org/llm-top-10/",
+      "notes": "OWASP GenAI Security Project 2025 Top 10 risks and mitigations for LLMs and generative AI applications."
+    }
+  },
+  "nist_functions": ["GOVERN", "MAP", "MEASURE", "MANAGE"],
+  "risk_register_mappings": [
+    {
+      "risk_id": "R001",
+      "risk": "VTON model is too heavy for available hardware",
+      "nist_functions": ["MAP", "MEASURE", "MANAGE"],
+      "controls": ["degraded-mode seeded examples", "async VTON job mode", "native C++ preprocessing evidence"],
+      "evidence": ["docs/known_limitations.md", "artifacts/eval/vton_jobs/job.json", "artifacts/native/tryops_vton_preprocess_cli"],
+      "residual_risk": "Real neural VTON models may still exceed local memory or latency budgets until GPU-backed serving is verified."
+    },
+    {
+      "risk_id": "R002",
+      "risk": "LLM quantization breaks quality",
+      "nist_functions": ["MAP", "MEASURE", "MANAGE"],
+      "controls": ["golden prompt benchmark", "quality gate", "fallback routing"],
+      "evidence": ["artifacts/eval/llm_baseline/benchmark.json", "artifacts/eval/llm_pareto/pareto.json", "artifacts/eval/llm_optimization_report/llm_optimization_report.md", "configs/promotion_policy.json", "artifacts/eval/llm_fallback/fallback.json"],
+      "residual_risk": "Real fp16-style, bitsandbytes 8-bit, and bitsandbytes 4-bit variants have been measured locally; native scheduler-only continuous batching evidence exists; GPTQ, AWQ, GGUF, and live vLLM serving remain future work."
+    },
+    {
+      "risk_id": "R003",
+      "risk": "Dataset license is unclear",
+      "nist_functions": ["GOVERN", "MAP", "MANAGE"],
+      "controls": ["dataset inventory", "data card license field", "synthetic-only local demo data"],
+      "evidence": ["docs/dataset_inventory.md", "docs/data_governance.md", "samples/data/demo_manifest.json"],
+      "residual_risk": "VITON-HD or Dress Code can only be used after license and access constraints are recorded for the exact subset."
+    },
+    {
+      "risk_id": "R004",
+      "risk": "Promotion is manual and subjective",
+      "nist_functions": ["GOVERN", "MEASURE", "MANAGE"],
+      "controls": ["policy-as-code gate", "approval checklist", "native policy bridge"],
+      "evidence": ["src/tryops/policy.py", "policies/model_promotion.rego", "reports/generated/vton-catvton-2026-06-11-001/promotion_decision.json"],
+      "residual_risk": "Live human approvals are simulated through candidate metadata until an authenticated UI exists."
+    },
+    {
+      "risk_id": "R005",
+      "risk": "Security evidence is missing",
+      "nist_functions": ["GOVERN", "MAP", "MEASURE", "MANAGE"],
+      "controls": ["promotion gate requires SBOM field", "dependency lockfile", "local SBOM fallback", "native model artifact scan gate", "runtime LLM guardrails", "security cases", "local in-toto/SLSA model provenance", "native model provenance verification", "supply-chain limitation tracking"],
+      "evidence": ["configs/promotion_policy.json", "requirements.lock", "artifacts/eval/supply_chain/sbom.spdx.json", "artifacts/eval/model_supply_chain/model_supply_chain_report.json", "artifacts/eval/model_supply_chain/model_provenance.json", "artifacts/eval/model_supply_chain/model_signature_bundle.json", "artifacts/native/tryops_model_provenance_cli", "artifacts/eval/guardrails/guardrail_report.json", "samples/security/llm_security_cases.json", "docs/known_limitations.md"],
+      "residual_risk": "A local SPDX SBOM fallback, native SafeTensors gate, and offline DSSE-shaped provenance bundle exist, but Syft, Trivy, Grype, pip-audit, Sigstore keyless OIDC, Rekor transparency-log inclusion, and in-toto/SLSA verification through external tooling remain production hardening work."
+    },
+    {
+      "risk_id": "R006",
+      "risk": "Monitoring is superficial",
+      "nist_functions": ["MAP", "MEASURE", "MANAGE"],
+      "controls": ["Prometheus-style metrics", "Grafana dashboards", "drift reports", "structured logs", "native chaos drill", "auto rollback on burn-rate page"],
+      "evidence": ["src/tryops/observability.py", "infra/grafana/dashboards/tryops-service-overview.json", "artifacts/eval/drift/drift_summary.json", "artifacts/logs/api_events.jsonl", "artifacts/eval/chaos/chaos_drill_report.json", "artifacts/deployments/rollback_state.json"],
+      "residual_risk": "Production exporters and durable telemetry backends are not connected yet; local auto rollback records alias restoration but does not reconcile a live cluster."
+    }
+  ],
+  "owasp_llm_top10_2025": [
+    {
+      "id": "LLM01:2025",
+      "name": "Prompt Injection",
+      "controls": ["prompt injection golden prompts", "runtime input classifier", "refusal behavior", "structured security cases"],
+      "evidence": ["samples/security/llm_security_cases.json", "samples/eval/golden_prompts.json", "src/tryops/guardrails.py", "native/go/tryops-guardrail/main.go"]
+    },
+    {
+      "id": "LLM02:2025",
+      "name": "Sensitive Information Disclosure",
+      "controls": ["PII redact-at-ingress", "secret-disclosure refusal", "structured logs without raw prompts", "privacy boundary docs"],
+      "evidence": ["samples/security/llm_security_cases.json", "src/tryops/guardrails.py", "docs/observability_contract.md", "docs/data_governance.md"]
+    },
+    {
+      "id": "LLM03:2025",
+      "name": "Supply Chain",
+      "controls": ["model source documentation", "model source license inventory", "SBOM policy requirement", "SafeTensors-only model artifact gate", "pickle-family weight rejection", "local in-toto/SLSA provenance", "native provenance verification", "known tooling limitation"],
+      "evidence": ["docs/llm_baseline.md", "configs/model_sources.json", "configs/promotion_policy.json", "native/cpp/tryops_model_scan/src/tryops_model_scan_cli.cpp", "native/cpp/tryops_model_provenance/src/tryops_model_provenance_cli.cpp", "artifacts/eval/model_supply_chain/model_supply_chain_report.json", "artifacts/eval/model_supply_chain/model_provenance.json", "docs/known_limitations.md"]
+    },
+    {
+      "id": "LLM04:2025",
+      "name": "Data and Model Poisoning",
+      "controls": ["dataset manifest validation", "checksums", "fixed evaluation sets"],
+      "evidence": ["src/tryops/pipelines/data_validation.py", "src/tryops/pipelines/data_ingestion.py", "samples/eval/golden_prompts.json"]
+    },
+    {
+      "id": "LLM05:2025",
+      "name": "Improper Output Handling",
+      "controls": ["structured JSON mode", "quality checks", "safe response schema", "runtime structured-output schema validator"],
+      "evidence": ["src/tryops/pipelines/llm_baseline.py", "src/tryops/api_contracts.py", "src/tryops/guardrails.py", "tests/test_guardrails.py"]
+    },
+    {
+      "id": "LLM06:2025",
+      "name": "Excessive Agency",
+      "controls": ["no external tools in baseline", "safe alias routing", "runtime unsafe-agency classifier", "admin approval gates"],
+      "evidence": ["src/tryops/routing.py", "src/tryops/guardrails.py", "docs/model_governance.md", "configs/promotion_policy.json"]
+    },
+    {
+      "id": "LLM07:2025",
+      "name": "System Prompt Leakage",
+      "controls": ["system-prompt leakage classifier", "hidden credential refusal", "no system prompt persistence", "security regression case", "promotion gate input"],
+      "evidence": ["samples/security/llm_security_cases.json", "src/tryops/guardrails.py", "native/go/tryops-guardrail/main.go", "configs/promotion_policy.json"]
+    },
+    {
+      "id": "LLM08:2025",
+      "name": "Vector and Embedding Weaknesses",
+      "controls": ["retrieval/vector store excluded from current scope", "future-work limitation", "safe baseline without embeddings"],
+      "evidence": ["docs/known_limitations.md", "docs/llm_baseline.md"]
+    },
+    {
+      "id": "LLM09:2025",
+      "name": "Misinformation",
+      "controls": ["expected-characteristic scoring", "human-readable quality checks", "model card limitations"],
+      "evidence": ["artifacts/eval/llm_baseline/benchmark.json", "docs/llm_results.md", "reports/generated/vton-catvton-2026-06-11-001/model_card.md"]
+    },
+    {
+      "id": "LLM10:2025",
+      "name": "Unbounded Consumption",
+      "controls": ["max token validation", "timeout handling", "usage quota checks", "budget showback gates", "semantic-cache cost reduction", "unbounded-consumption guardrail probe", "load test"],
+      "evidence": ["src/tryops/api_contracts.py", "src/tryops/timeouts.py", "src/tryops/quota.py", "src/tryops/finops.py", "src/tryops/semantic_cache.py", "artifacts/eval/finops/finops_report.json", "src/tryops/guardrails.py", "artifacts/eval/llm_load/load_test.json"]
+    }
+  ],
+  "responsible_ai_limitations": [
+    {
+      "id": "RAI001",
+      "area": "VTON representation",
+      "limitation": "Synthetic local examples do not represent the full range of body types, skin tones, poses, garment categories, cultural clothing, or accessibility needs.",
+      "mitigation": "Use the synthetic set only as smoke evidence; document licenses and representation limits before adding VITON-HD, Dress Code, or any user-uploaded examples."
+    },
+    {
+      "id": "RAI002",
+      "area": "VTON visual harm",
+      "limitation": "Virtual try-on output can distort identity, body shape, or garment appearance and may create misleading confidence in fit or appearance.",
+      "mitigation": "Expose failure taxonomy, require human review for low-quality outputs, and avoid claims about real-world fit until validated."
+    },
+    {
+      "id": "RAI003",
+      "area": "LLM reliability",
+      "limitation": "The default local LLM path is still a deterministic contract baseline, while real neural claims must point to the separate GPU benchmark artifacts.",
+      "mitigation": "Use `llm_real`, `llm_pareto`, and `llm_optimization_report` artifacts for neural and quantized model claims; keep unmeasured GPTQ, AWQ, GGUF, and vLLM claims unchecked."
+    },
+    {
+      "id": "RAI004",
+      "area": "Operational evidence",
+      "limitation": "Current monitoring, drift, and dashboard artifacts are local evidence and not live production telemetry.",
+      "mitigation": "Replace simulated windows with live sanitized request metadata before using the reports as production alert gates."
+    }
+  ]
+}

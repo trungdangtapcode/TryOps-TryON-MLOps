@@ -1,0 +1,60 @@
+{
+  "schema_version": "tryops.dataset_licenses.v1",
+  "generated_from_research_date": "2026-06-11",
+  "datasets": [
+    {
+      "id": "tryops-synthetic-demo",
+      "role": "local_smoke_and_degraded_demo",
+      "source_uri": "scripts/create_synthetic_vton_demo.py",
+      "license": "Apache-2.0",
+      "allowed_use": "Use in local smoke tests, demos, docs, and generated artifacts.",
+      "access_status": "checked_in_generator",
+      "usage_restrictions": [
+        "Synthetic examples only; do not treat as real benchmark quality evidence.",
+        "Do not infer representation coverage from the synthetic set."
+      ]
+    },
+    {
+      "id": "viton-hd",
+      "role": "candidate_fallback_benchmark",
+      "source_uri": "https://github.com/shadow2496/VITON-HD",
+      "license": "CC-BY-NC-4.0",
+      "allowed_use": "Research and non-commercial evaluation only, with attribution and citation.",
+      "access_status": "not_stored",
+      "usage_restrictions": [
+        "Non-commercial use only.",
+        "Record exact downloaded subset, checksums, and citation before use.",
+        "Do not use as production or commercial training data without separate permission."
+      ]
+    },
+    {
+      "id": "dress-code",
+      "role": "stretch_multi_category_benchmark",
+      "source_uri": "https://github.com/aimagelab/dress-code",
+      "license": "YNAP-Dress-Code-custom-non-commercial-academic",
+      "allowed_use": "Non-commercial academic research, teaching, and publication only after request approval and signed release agreement.",
+      "access_status": "not_stored",
+      "usage_restrictions": [
+        "Dataset is not released to private companies.",
+        "Non-institutional email requests are not accepted by the dataset maintainers.",
+        "Signed release agreement is mandatory.",
+        "No commercial use.",
+        "Do not attempt to re-identify models.",
+        "Do not create or distribute unauthorized alterations of the dataset."
+      ]
+    },
+    {
+      "id": "user-uploaded-images",
+      "role": "future_interactive_demo_input",
+      "source_uri": "runtime://user-upload",
+      "license": "user-provided-content",
+      "allowed_use": "Transient inference only when an explicit user request supplies the image.",
+      "access_status": "not_stored",
+      "usage_restrictions": [
+        "Do not commit uploaded person images.",
+        "Do not use uploads for training unless separate consent and license are recorded.",
+        "Delete or expire images after the demo workflow unless retention is explicitly approved."
+      ]
+    }
+  ]
+}

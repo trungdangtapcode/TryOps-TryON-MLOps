@@ -1,0 +1,53 @@
+{
+  "schema_version": "tryops.service_level_objectives.v1",
+  "period_days": 30,
+  "default_windows": [
+    {
+      "name": "page_fast",
+      "long_window": "1h",
+      "short_window": "5m",
+      "burn_rate_threshold": 14.4,
+      "severity": "page",
+      "budget_consumed": 0.02
+    },
+    {
+      "name": "page_slow",
+      "long_window": "6h",
+      "short_window": "30m",
+      "burn_rate_threshold": 6.0,
+      "severity": "page",
+      "budget_consumed": 0.05
+    },
+    {
+      "name": "ticket",
+      "long_window": "3d",
+      "short_window": "6h",
+      "burn_rate_threshold": 1.0,
+      "severity": "ticket",
+      "budget_consumed": 0.10
+    }
+  ],
+  "workloads": {
+    "llm": {
+      "availability_target": 0.99,
+      "error_budget_ratio": 0.01,
+      "latency_p95_ms_max": 2500.0,
+      "quality_score_min": 0.95,
+      "tokens_per_second_min": 20.0,
+      "measurement_source": "artifacts/eval/llm_baseline/benchmark.json"
+    },
+    "vton": {
+      "availability_target": 0.99,
+      "error_budget_ratio": 0.01,
+      "latency_ms_max": 12000.0,
+      "garment_similarity_min": 0.80,
+      "measurement_source": "artifacts/eval/vton_comparison/comparison.json"
+    },
+    "control_plane": {
+      "availability_target": 0.995,
+      "error_budget_ratio": 0.005,
+      "endpoint_latency_ms_max": 500.0,
+      "measurement_source": "artifacts/eval/endpoint_smoke/deployed_endpoint_smoke.json"
+    }
+  }
+}

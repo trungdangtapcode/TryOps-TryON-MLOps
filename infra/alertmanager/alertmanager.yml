@@ -1,0 +1,39 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: tryops-ticket-log
+  group_by:
+    - alertname
+    - workload
+    - severity
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    - receiver: tryops-page-webhook
+      matchers:
+        - severity="page"
+      group_wait: 10s
+      repeat_interval: 30m
+    - receiver: tryops-ticket-log
+      matchers:
+        - severity=~"warning|ticket"
+      repeat_interval: 4h
+
+receivers:
+  - name: tryops-ticket-log
+  - name: tryops-page-webhook
+    webhook_configs:
+      - url: http://controller:18082/alerts/webhook
+        send_resolved: true
+        max_alerts: 0
+
+inhibit_rules:
+  - source_matchers:
+      - severity="page"
+    target_matchers:
+      - severity=~"warning|ticket"
+    equal:
+      - workload
+      - alertname

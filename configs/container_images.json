@@ -1,0 +1,83 @@
+{
+  "schema_version": "tryops.container_images.v1",
+  "generated_for": "PA084",
+  "images": [
+    {
+      "role": "gateway",
+      "image": "tryops/gateway",
+      "dockerfile": "Dockerfile.gateway",
+      "context": ".",
+      "runtime": "rust-axum",
+      "compose_service": "gateway",
+      "required_stage": "rust",
+      "source_paths": ["native/rust/tryops-gateway/src", "web/src", "configs/api_keys.json"],
+      "ports": [8081]
+    },
+    {
+      "role": "controller",
+      "image": "tryops/controller",
+      "dockerfile": "Dockerfile.controller",
+      "context": ".",
+      "runtime": "go-platform-controller",
+      "compose_service": "controller",
+      "required_stage": "go",
+      "source_paths": ["native/go/tryops-controller"],
+      "ports": [18082]
+    },
+    {
+      "role": "guardrail",
+      "image": "tryops/guardrail",
+      "dockerfile": "Dockerfile.guardrail",
+      "context": ".",
+      "runtime": "go-guardrail-sidecar",
+      "compose_service": "guardrail",
+      "required_stage": "go",
+      "source_paths": ["native/go/tryops-guardrail"],
+      "ports": [18083]
+    },
+    {
+      "role": "benchmark",
+      "image": "tryops/benchmark",
+      "dockerfile": "Dockerfile.benchmark",
+      "context": ".",
+      "runtime": "go-load-driver-plus-rust-gateway",
+      "compose_service": "benchmark",
+      "required_stage": "go",
+      "source_paths": ["native/go/tryops-benchmark", "native/rust/tryops-gateway/src", "src/tryops"],
+      "ports": []
+    },
+    {
+      "role": "cpp-tools",
+      "image": "tryops/cpp-tools",
+      "dockerfile": "Dockerfile.cpp-tools",
+      "context": ".",
+      "runtime": "native-cpp-cli-suite",
+      "compose_service": "cpp-tools",
+      "required_stage": "cpp",
+      "source_paths": ["native/cpp"],
+      "ports": []
+    },
+    {
+      "role": "api",
+      "image": "tryops/api",
+      "dockerfile": "Dockerfile.api",
+      "context": ".",
+      "runtime": "fastapi-bff",
+      "compose_service": "api",
+      "required_stage": "python",
+      "source_paths": ["src/tryops", "configs"],
+      "ports": [8080]
+    },
+    {
+      "role": "web-assets",
+      "image": "tryops/web-assets",
+      "dockerfile": "Dockerfile.web-assets",
+      "context": ".",
+      "runtime": "vite-static-assets",
+      "compose_service": "web-assets",
+      "required_stage": "node",
+      "source_paths": ["web/src", "web/package.json", "web/vite.config.ts"],
+      "ports": [80]
+    }
+  ]
+}

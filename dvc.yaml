@@ -1,0 +1,12 @@
+stages:
+  validate_demo_manifest:
+    cmd: PYTHONPATH=src python scripts/run_local_promotion_pipeline.py samples/candidates/vton_candidate_good.json samples/data/demo_manifest.json --stage champion --output-dir reports/generated
+    deps:
+      - samples/candidates/vton_candidate_good.json
+      - samples/data/demo_manifest.json
+      - scripts/run_local_promotion_pipeline.py
+      - src/tryops
+    outs:
+      - reports/generated/vton-catvton-2026-06-11-001:
+          persist: true
+

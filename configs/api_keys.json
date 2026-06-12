@@ -1,0 +1,52 @@
+{
+  "schema_version": "tryops.api_keys.v1",
+  "description": "Local demo API-key registry. Production deployments should use OIDC, workload identity, or an external secrets manager instead of static local keys.",
+  "keys": [
+    {
+      "key_id": "admin-demo",
+      "role": "admin",
+      "key_hash_sha256": "48ef39eb464b21ac986457f7d835c9373e6ec5aeefe1e47526fa982ee5a82643",
+      "scopes": [
+        "admin:read",
+        "lineage:read",
+        "promotion:evaluate",
+        "lineage:create",
+        "session:read"
+      ],
+      "active": true
+    },
+    {
+      "key_id": "operator-demo",
+      "role": "operator",
+      "key_hash_sha256": "32f10a77aa1027107c643153064f4d46568876c0c9d7d31dc01e6d5df2f9f093",
+      "scopes": [
+        "admin:read",
+        "lineage:read",
+        "promotion:evaluate",
+        "session:read"
+      ],
+      "active": true
+    },
+    {
+      "key_id": "risk-demo",
+      "role": "risk_reviewer",
+      "key_hash_sha256": "a8bfa08ad3077946c857c3593bc96d70a8040d21995c4d13fefeb3864b15fabe",
+      "scopes": [
+        "promotion:evaluate",
+        "session:read"
+      ],
+      "active": true
+    },
+    {
+      "key_id": "viewer-demo",
+      "role": "viewer",
+      "key_hash_sha256": "33d23a0d81479640f803ae63675b16457222520f5faee90d29c0f602bf8ca0b1",
+      "scopes": [
+        "admin:read",
+        "lineage:read",
+        "session:read"
+      ],
+      "active": true
+    }
+  ]
+}

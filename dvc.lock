@@ -1,0 +1,31 @@
+schema: '2.0'
+stages:
+  validate_demo_manifest:
+    cmd: PYTHONPATH=src python scripts/run_local_promotion_pipeline.py 
+      samples/candidates/vton_candidate_good.json 
+      samples/data/demo_manifest.json --stage champion --output-dir 
+      reports/generated
+    deps:
+    - path: samples/candidates/vton_candidate_good.json
+      hash: md5
+      md5: db045afe5ac2c011ec7d8a531adca41a
+      size: 1606
+    - path: samples/data/demo_manifest.json
+      hash: md5
+      md5: 74ab518f74ddf3f0332d7006cbec5181
+      size: 581
+    - path: scripts/run_local_promotion_pipeline.py
+      hash: md5
+      md5: 04e8d5c12a40b2181128d2fe7940e171
+      size: 1337
+    - path: src/tryops
+      hash: md5
+      md5: f8b450b830ca135892032d5f3eb84db7.dir
+      size: 1179317
+      nfiles: 155
+    outs:
+    - path: reports/generated/vton-catvton-2026-06-11-001
+      hash: md5
+      md5: 3d2cb2be22c291c44c46b40ad3f020d6.dir
+      size: 11012
+      nfiles: 11

@@ -1,0 +1,11 @@
+{
+  "schema_version": "tryops.alert_thresholds.v1",
+  "latency": {
+    "llm_latency_p95_ms_max": 100.0,
+    "vton_latency_ms_max": 5000.0
+  },
+  "quality": {
+    "llm_quality_score_min": 0.95,
+    "vton_garment_similarity_min": 0.8
+  }
+}

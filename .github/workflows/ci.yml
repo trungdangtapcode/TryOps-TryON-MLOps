@@ -1,0 +1,181 @@
+name: tryops-ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - production
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+  security-events: write
+
+env:
+  TRYOPS_ARTIFACT_DIR: artifacts/eval/ci
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository }}
+
+jobs:
+  local-ci:
+    name: lint-test-native-evidence
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.22"
+          cache-dependency-path: native/go/**/go.sum
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install Python package
+        run: python -m pip install -e .
+
+      - name: Run Python contracts
+        run: make test
+
+      - name: Run web typecheck and build
+        run: make web-typecheck web-build
+
+      - name: Run native Go tests
+        run: make native-go-test native-vuln-scan-test native-ci-contract-test
+
+      - name: Run Rust gateway tests
+        run: make native-rust-test
+
+      - name: Run native C++ tests
+        run: make native-cpp-test native-semantic-cache-test native-trace-envelope-cpp-test
+
+      - name: Validate Compose and container contracts
+        run: |
+          docker compose config --quiet
+          docker compose --profile tls config --quiet
+          make native-container-contract-sample
+
+      - name: Generate supply-chain and vulnerability evidence
+        run: make supply-chain-sample vulnerability-scan-sample
+
+      - name: Generate incident workflow evidence
+        run: make native-incident-workflow-sample
+
+      - name: Validate CI contract
+        run: make native-ci-contract-sample
+
+      - name: Refresh evaluation index
+        run: make evaluation-index-sample
+
+      - name: Upload local evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: tryops-local-ci-evidence
+          path: |
+            artifacts/eval
+            reports/generated
+            requirements.lock
+          retention-days: 14
+
+  images-and-supply-chain:
+    name: image-sbom-scan-sign
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        image:
+          - role: gateway
+            dockerfile: Dockerfile.gateway
+          - role: controller
+            dockerfile: Dockerfile.controller
+          - role: guardrail
+            dockerfile: Dockerfile.guardrail
+          - role: benchmark
+            dockerfile: Dockerfile.benchmark
+          - role: cpp-tools
+            dockerfile: Dockerfile.cpp-tools
+          - role: api
+            dockerfile: Dockerfile.api
+          - role: web-assets
+            dockerfile: Dockerfile.web-assets
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build image with metadata
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.image.dockerfile }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/tryops-${{ matrix.image.role }}:${{ github.sha }}
+            ${{ env.IMAGE_PREFIX }}/tryops-${{ matrix.image.role }}:ci
+          load: ${{ github.event_name == 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' }}
+          sbom: true
+          provenance: true
+
+      - name: Prepare image evidence directories
+        run: mkdir -p artifacts/eval/ci/sbom artifacts/eval/ci/trivy artifacts/eval/ci/signatures
+
+      - name: Generate Syft SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE_PREFIX }}/tryops-${{ matrix.image.role }}:${{ github.sha }}
+          format: spdx-json
+          output-file: artifacts/eval/ci/sbom/${{ matrix.image.role }}.spdx.json
+
+      - name: Run Trivy image scan
+        uses: aquasecurity/trivy-action@0.29.0
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}/tryops-${{ matrix.image.role }}:${{ github.sha }}
+          scanners: vuln,secret,misconfig
+          vuln-type: os,library
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: sarif
+          output: artifacts/eval/ci/trivy/${{ matrix.image.role }}.sarif
+          exit-code: "1"
+
+      - name: Install Cosign
+        if: github.event_name != 'pull_request'
+        uses: sigstore/cosign-installer@v3.8.2
+
+      - name: Sign pushed image with keyless OIDC
+        if: github.event_name != 'pull_request'
+        run: cosign sign --yes ${{ env.IMAGE_PREFIX }}/tryops-${{ matrix.image.role }}:${{ github.sha }}
+
+      - name: Upload image evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tryops-image-supply-chain-${{ matrix.image.role }}
+          path: artifacts/eval/ci
+          retention-days: 14

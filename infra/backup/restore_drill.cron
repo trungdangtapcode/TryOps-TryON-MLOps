@@ -1,0 +1,6 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Daily enterprise restore drill at 03:17 UTC. Operators provide
+# TRYOPS_POSTGRES_BACKUP_DSN and MinIO credentials through the host environment.
+17 3 * * * cd /opt/tryops && make native-backup-restore-live >> /var/log/tryops/restore-drill.log 2>&1

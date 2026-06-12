@@ -1,0 +1,29 @@
+{
+  "candidate_id": "vton-catvton-2026-06-11-bad",
+  "workload": "vton",
+  "model_name": "catvton-baseline",
+  "model_version": "0.1.1",
+  "metrics": {
+    "garment_fidelity": 0.61,
+    "identity_preservation": 0.65,
+    "artifact_rate": 0.21,
+    "latency_p95_ms": 18100
+  },
+  "artifacts": {
+    "model_card": "s3://tryops-artifacts/model-cards/vton-catvton-bad.md",
+    "evaluation_report": "s3://tryops-artifacts/reports/vton-catvton-bad.json"
+  },
+  "approvals": ["mlops_owner"],
+  "risk_status": "unreviewed",
+  "vulnerabilities": {
+    "critical": 1,
+    "high": 2
+  },
+  "signed": false,
+  "metadata": {
+    "code_version": "local-dev",
+    "dataset_version": "vitonhd-demo-v1",
+    "pipeline_run_id": "run-vton-bad"
+  }
+}
+

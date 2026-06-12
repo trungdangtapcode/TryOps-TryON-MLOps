@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TryOps LLM Request",
+  "type": "object",
+  "required": ["prompt"],
+  "properties": {
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8000
+    },
+    "model_alias": {
+      "type": "string",
+      "default": "champion",
+      "enum": ["baseline", "candidate", "challenger", "champion"]
+    },
+    "max_tokens": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 2048,
+      "default": 512
+    },
+    "structured": {
+      "type": "boolean",
+      "default": true
+    },
+    "routing_mode": {
+      "type": "string",
+      "enum": ["direct", "canary"],
+      "default": "direct"
+    },
+    "canary_percent": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 0
+    },
+    "shadow": {
+      "type": "boolean",
+      "default": false
+    },
+    "fallback_enabled": {
+      "type": "boolean",
+      "default": false
+    },
+    "optimized_available": {
+      "type": "boolean",
+      "default": false
+    },
+    "semantic_cache_enabled": {
+      "type": "boolean",
+      "default": true
+    },
+    "semantic_cache_threshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "default": 0.72
+    },
+    "user_id": {
+      "type": "string",
+      "maxLength": 128,
+      "default": "anonymous"
+    },
+    "quota_plan": {
+      "type": "string",
+      "enum": ["free", "team", "enterprise"],
+      "default": "free"
+    },
+    "timeout_ms": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 300000,
+      "default": 30000
+    },
+    "request_id": {
+      "type": "string"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,82 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  filelog/tryops:
+    include:
+      - /var/log/tryops/*.jsonl
+    start_at: beginning
+    include_file_path: true
+    operators:
+      - type: json_parser
+        parse_from: body
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  resource/tryops:
+    attributes:
+      - key: service.namespace
+        value: tryops
+        action: upsert
+      - key: deployment.environment
+        value: local
+        action: upsert
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  debug:
+    verbosity: basic
+  file/traces:
+    path: /var/lib/tryops/otel/traces.jsonl
+  file/logs:
+    path: /var/lib/tryops/otel/logs.jsonl
+  file/metrics:
+    path: /var/lib/tryops/otel/metrics.jsonl
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  extensions:
+    - health_check
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/tryops
+        - batch
+      exporters:
+        - debug
+        - file/traces
+    logs:
+      receivers:
+        - otlp
+        - filelog/tryops
+      processors:
+        - memory_limiter
+        - resource/tryops
+        - batch
+      exporters:
+        - debug
+        - file/logs
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/tryops
+        - batch
+      exporters:
+        - debug
+        - file/metrics

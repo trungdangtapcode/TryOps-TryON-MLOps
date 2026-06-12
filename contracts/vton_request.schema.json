@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "TryOps VTON Request",
+  "type": "object",
+  "required": ["person_image_uri", "garment_image_uri"],
+  "properties": {
+    "person_image_uri": {
+      "type": "string",
+      "description": "URI of the person image."
+    },
+    "garment_image_uri": {
+      "type": "string",
+      "description": "URI of the garment image."
+    },
+    "model_alias": {
+      "type": "string",
+      "default": "champion",
+      "enum": ["candidate", "challenger", "champion"]
+    },
+    "trace": {
+      "type": "boolean",
+      "default": true
+    }
+  },
+  "additionalProperties": false
+}
+

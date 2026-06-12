@@ -1,0 +1,46 @@
+{
+  "set_id": "tryops-vton-failure-taxonomy-v1",
+  "labels": [
+    {
+      "id": "texture_loss",
+      "description": "Garment pattern, logo, or material texture is lost or blurred."
+    },
+    {
+      "id": "sleeve_distortion",
+      "description": "Sleeves are warped, missing, duplicated, or unnaturally attached."
+    },
+    {
+      "id": "identity_shift",
+      "description": "Face, body shape, skin tone, or other identity features change unexpectedly."
+    },
+    {
+      "id": "pose_failure",
+      "description": "The generated garment does not follow the target pose."
+    },
+    {
+      "id": "background_artifact",
+      "description": "Background content is damaged by the generation."
+    },
+    {
+      "id": "garment_color_shift",
+      "description": "Garment color changes beyond lighting tolerance."
+    },
+    {
+      "id": "body_shape_distortion",
+      "description": "Body proportions are distorted by the try-on output."
+    },
+    {
+      "id": "edge_blending_failure",
+      "description": "Garment edges blend poorly with the person image."
+    },
+    {
+      "id": "occlusion_failure",
+      "description": "Hands, hair, bags, or other occluders are handled incorrectly."
+    },
+    {
+      "id": "unsupported_pose",
+      "description": "Pose is outside the supported range for the current model."
+    }
+  ]
+}
+

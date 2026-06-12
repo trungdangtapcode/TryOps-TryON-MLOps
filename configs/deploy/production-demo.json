@@ -1,0 +1,18 @@
+{
+  "profile": "production-demo",
+  "api_prefix": "/v1",
+  "release_mode": "manual-approval",
+  "routing": {
+    "default_vton_alias": "champion",
+    "default_llm_alias": "champion",
+    "canary_percent": 10
+  },
+  "checks": {
+    "require_promotion_approval": true,
+    "require_model_card": true,
+    "require_data_card": true,
+    "require_lineage": true,
+    "require_release_notes": true,
+    "require_rollback_plan": true
+  }
+}

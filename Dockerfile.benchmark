@@ -1,0 +1,26 @@
+FROM golang:1.22-alpine AS go-build
+
+WORKDIR /src
+COPY native/go/tryops-benchmark/go.mod ./
+COPY native/go/tryops-benchmark/*.go ./
+RUN CGO_ENABLED=0 GOFLAGS=-mod=mod go build -buildvcs=false -o /out/tryops_benchmark .
+
+FROM rust:1-slim AS gateway-build
+
+WORKDIR /build
+COPY native/rust/tryops-gateway/Cargo.toml native/rust/tryops-gateway/Cargo.lock ./
+COPY native/rust/tryops-gateway/src ./src
+RUN cargo build --release
+
+FROM python:3.12-slim
+
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY src ./src
+COPY configs ./configs
+COPY --from=go-build /out/tryops_benchmark /usr/local/bin/tryops_benchmark
+COPY --from=gateway-build /build/target/release/tryops-gateway /usr/local/bin/tryops-gateway
+RUN pip install --no-cache-dir fastapi uvicorn prometheus-client
+ENV PYTHONPATH=/app/src
+ENTRYPOINT ["tryops_benchmark"]
+CMD ["--gateway-bin", "/usr/local/bin/tryops-gateway", "--python-bin", "python", "--output", "/tmp/tryops-benchmark-output/native_gateway_benchmark.json"]

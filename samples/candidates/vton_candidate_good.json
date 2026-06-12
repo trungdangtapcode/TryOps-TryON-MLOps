@@ -1,0 +1,48 @@
+{
+  "candidate_id": "vton-catvton-2026-06-11-001",
+  "workload": "vton",
+  "model_name": "catvton-baseline",
+  "model_version": "0.1.0",
+  "metrics": {
+    "garment_fidelity": 0.81,
+    "identity_preservation": 0.78,
+    "artifact_rate": 0.08,
+    "latency_p95_ms": 9300
+  },
+  "artifacts": {
+    "model_card": "s3://tryops-artifacts/model-cards/vton-catvton-001.md",
+    "data_card": "s3://tryops-artifacts/data-cards/vitonhd-demo-v1.md",
+    "evaluation_report": "s3://tryops-artifacts/reports/vton-catvton-001.json",
+    "sbom": "s3://tryops-artifacts/sbom/vton-catvton-001.spdx.json",
+    "model_artifact_scan": "s3://tryops-artifacts/model-scans/vton-catvton-001.json",
+    "model_provenance": "s3://tryops-artifacts/provenance/vton-catvton-001.model-provenance.json"
+  },
+  "approvals": ["mlops_owner", "risk_owner"],
+  "risk_status": "medium_approved",
+  "vulnerabilities": {
+    "critical": 0,
+    "high": 0
+  },
+  "signed": true,
+  "metadata": {
+    "code_version": "local-dev",
+    "dataset_version": "vitonhd-demo-v1",
+    "pipeline_run_id": "run-vton-001",
+    "container_digest": "sha256:demo",
+    "model_provenance": {
+      "status": "passed",
+      "statement_type": "https://in-toto.io/Statement/v1",
+      "predicate_type": "https://slsa.dev/provenance/v1",
+      "signature_mode": "local-dsse-digest",
+      "signer_identity": "tryops-local-ci",
+      "verified": true
+    },
+    "model_artifacts": {
+      "serialization_policy": "safetensors_only",
+      "scan_status": "passed",
+      "unsafe_file_count": 0,
+      "safetensors_files": 1,
+      "rejected_extensions": []
+    }
+  }
+}

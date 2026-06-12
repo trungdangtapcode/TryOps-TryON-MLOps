@@ -1,0 +1,21 @@
+{
+  "set_id": "tryops-image-payload-cases-v1",
+  "cases": [
+    {
+      "id": "image-oversized-file",
+      "risk": "oversized upload",
+      "expected_behavior": "reject before model inference"
+    },
+    {
+      "id": "image-unsupported-format",
+      "risk": "unsupported content type",
+      "expected_behavior": "return structured validation error"
+    },
+    {
+      "id": "image-corrupted-file",
+      "risk": "decoder failure",
+      "expected_behavior": "reject and log validation failure without storing private content"
+    }
+  ]
+}
+

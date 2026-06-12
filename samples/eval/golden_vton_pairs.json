@@ -1,0 +1,13 @@
+{
+  "set_id": "tryops-vton-golden-pairs-v1",
+  "purpose": "Fixed VTON demo and regression set",
+  "pairs": [
+    {
+      "id": "demo-person-001-garment-001",
+      "person_image_uri": "data/raw/demo/person-001.png",
+      "garment_image_uri": "data/raw/demo/garment-001.png",
+      "expected_checks": ["garment texture preserved", "identity preserved", "no large sleeve artifact"]
+    }
+  ]
+}
+

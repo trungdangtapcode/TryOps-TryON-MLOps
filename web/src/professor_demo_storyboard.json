@@ -1,0 +1,203 @@
+{
+  "metrics": [
+    { "label": "Mode", "value": "seeded", "detail": "No GPU required", "tone": "green" },
+    { "label": "Network", "value": "offline", "detail": "Local artifacts only", "tone": "green" },
+    { "label": "Path", "value": "7 steps", "detail": "Admission to rollback", "tone": "blue" },
+    { "label": "Acceptance", "value": "native Go", "detail": "make professor-demo-acceptance", "tone": "green" }
+  ],
+  "steps": [
+    {
+      "id": "preflight",
+      "order": "01",
+      "title": "Control Plane Preflight",
+      "track": "Stack",
+      "status": "passed",
+      "tone": "green",
+      "summary": "18/18 stack checks pass through the Rust gateway.",
+      "operatorLine": "Show the Console, gateway SPA fallback, API readiness, metrics, MinIO, and MLflow as one product surface.",
+      "command": "make app-smoke",
+      "primaryArtifact": "artifacts/eval/full_stack/full_stack_smoke.json",
+      "artifacts": [
+        "artifacts/eval/full_stack/full_stack_smoke.json",
+        "artifacts/eval/evaluation_index/evaluation_index.json"
+      ],
+      "metrics": [
+        { "label": "checks", "value": "18/18", "tone": "green" },
+        { "label": "gateway", "value": "ready", "tone": "green" },
+        { "label": "auth", "value": "preflight", "tone": "blue" },
+        { "label": "evidence", "value": "indexed", "tone": "blue" }
+      ],
+      "transcript": [
+        "Rust gateway serves the Console and SPA fallback.",
+        "Gateway rejects missing API keys and missing scopes before work starts.",
+        "Evaluation summary, VTON artifacts, metrics, MinIO, Grafana, and MLflow are reachable."
+      ]
+    },
+    {
+      "id": "quota",
+      "order": "02",
+      "title": "Usage Quota Admission",
+      "track": "Quota",
+      "status": "passed",
+      "tone": "green",
+      "summary": "Native quota ledger admits a user request and records remaining plan capacity.",
+      "operatorLine": "Open the quota step before any generation to prove user-level usage is controlled.",
+      "command": "make native-quota-ledger-smoke",
+      "primaryArtifact": "artifacts/eval/quota/native_quota_ledger_smoke.json",
+      "artifacts": [
+        "artifacts/eval/quota/native_quota_ledger_smoke.json",
+        "artifacts/eval/quota/quota_usage.json"
+      ],
+      "metrics": [
+        { "label": "plan", "value": "free", "tone": "blue" },
+        { "label": "requests left", "value": 18, "tone": "green" },
+        { "label": "tokens left", "value": 4400, "tone": "green" },
+        { "label": "engine", "value": "native", "tone": "green" }
+      ],
+      "transcript": [
+        "The ledger hashes the user and evaluates daily request and token dimensions.",
+        "Allowed traffic carries remaining capacity into the response contract.",
+        "The same quota state can back chargeback, budget alerts, and tenant throttling."
+      ]
+    },
+    {
+      "id": "safety-gate",
+      "order": "03",
+      "title": "Bad Model Gate",
+      "track": "Safety",
+      "status": "safe",
+      "tone": "green",
+      "summary": "A seeded unsafe VTON candidate is blocked before champion promotion.",
+      "operatorLine": "Run the professor acceptance path and show the failed candidate as a successful safety outcome.",
+      "command": "make professor-demo-acceptance",
+      "primaryArtifact": "artifacts/eval/demo_acceptance/professor_demo_acceptance.json",
+      "artifacts": [
+        "artifacts/eval/demo_acceptance/professor_demo_acceptance.json",
+        "samples/candidates/vton_candidate_bad.json"
+      ],
+      "metrics": [
+        { "label": "approved", "value": "false", "tone": "green" },
+        { "label": "critical vulns", "value": 1, "tone": "amber" },
+        { "label": "signed", "value": "false", "tone": "amber" },
+        { "label": "result", "value": "blocked", "tone": "green" }
+      ],
+      "transcript": [
+        "The bad candidate is unsigned and contains critical vulnerabilities.",
+        "Policy returns a non-approval decision instead of mutating the release lane.",
+        "The native Go acceptance harness records this as a passing professor-demo check."
+      ]
+    },
+    {
+      "id": "optimization",
+      "order": "04",
+      "title": "LLM Optimization Frontier",
+      "track": "Optimization",
+      "status": "passed",
+      "tone": "green",
+      "summary": "4-bit LLM is recommended from a real Pareto sweep while the carbon gate remains green.",
+      "operatorLine": "Use the Pareto panel to show production tradeoffs across quality, latency, VRAM, and energy.",
+      "command": "make llm-pareto-sample",
+      "primaryArtifact": "artifacts/eval/llm_pareto/pareto.json",
+      "artifacts": [
+        "artifacts/eval/llm_pareto/pareto.json",
+        "artifacts/eval/energy/energy_sweep.json",
+        "artifacts/eval/leaderboard/leaderboard.json"
+      ],
+      "metrics": [
+        { "label": "recommended", "value": "4bit", "tone": "green" },
+        { "label": "VRAM", "value": "0.48 GB", "tone": "green" },
+        { "label": "quality", "value": "0.278", "tone": "blue" },
+        { "label": "carbon gate", "value": "pass", "tone": "green" }
+      ],
+      "transcript": [
+        "The real sweep ranks fp16-style, 8-bit, and 4-bit variants.",
+        "The 8-bit variant is dominated because it is slower and fails the SLO.",
+        "The recommendation chooses the smallest VRAM point on the passing Pareto frontier."
+      ]
+    },
+    {
+      "id": "vton-quality",
+      "order": "05",
+      "title": "VTON Quality Gallery",
+      "track": "VTON",
+      "status": "passed",
+      "tone": "green",
+      "summary": "Two VTON outputs are compared with seeded images and metric-backed winner selection.",
+      "operatorLine": "Switch to VTON quality to inspect generated artifacts, failure labels, and winner evidence.",
+      "command": "make vton-compare-sample",
+      "primaryArtifact": "artifacts/eval/vton_comparison/comparison.json",
+      "artifacts": [
+        "artifacts/eval/vton_comparison/comparison.json",
+        "artifacts/eval/vton_comparison/naive_standard.png",
+        "artifacts/eval/vton_comparison/naive_wide_lower.png"
+      ],
+      "metrics": [
+        { "label": "winner", "value": "standard", "tone": "green" },
+        { "label": "garment score", "value": "1.00", "tone": "green" },
+        { "label": "SSIM", "value": "0.525", "tone": "blue" },
+        { "label": "runs", "value": 2, "tone": "blue" }
+      ],
+      "transcript": [
+        "The standard run wins both garment-preservation proxy and structural-similarity selection.",
+        "The lower wide run remains visible with failure labels for audit discussion.",
+        "The gallery stays available offline because images and JSON reports are local artifacts."
+      ]
+    },
+    {
+      "id": "lineage",
+      "order": "06",
+      "title": "Promotion Lineage",
+      "track": "Release",
+      "status": "passed",
+      "tone": "green",
+      "summary": "Champion promotion is backed by signed model provenance and a reproducible release record.",
+      "operatorLine": "Move from model quality to release trust: signed artifacts, SLSA provenance, and promotion decision.",
+      "command": "make signed-pr-promotion-sample",
+      "primaryArtifact": "reports/generated/vton-catvton-2026-06-11-001/lineage.json",
+      "artifacts": [
+        "reports/generated/vton-catvton-2026-06-11-001/lineage.json",
+        "reports/generated/vton-catvton-2026-06-11-001/promotion_decision.json",
+        "reports/generated/vton-catvton-2026-06-11-001/openlineage_validation.json"
+      ],
+      "metrics": [
+        { "label": "candidate", "value": "001", "tone": "blue" },
+        { "label": "signed", "value": "true", "tone": "green" },
+        { "label": "provenance", "value": "verified", "tone": "green" },
+        { "label": "target", "value": "champion", "tone": "green" }
+      ],
+      "transcript": [
+        "The release candidate carries local DSSE digest signing evidence.",
+        "SLSA v1 provenance is verified before champion promotion.",
+        "The promotion decision is recorded as an artifact instead of being an oral claim."
+      ]
+    },
+    {
+      "id": "rollback",
+      "order": "07",
+      "title": "Rollback And Governance",
+      "track": "Recovery",
+      "status": "passed",
+      "tone": "green",
+      "summary": "A rollback record restores the previous champion and governance mapping remains complete.",
+      "operatorLine": "Close with recovery and audit posture: rollback evidence plus NIST and OWASP coverage.",
+      "command": "make rollback-sample",
+      "primaryArtifact": "artifacts/deployments/vton-catvton-2026-06-11-001-production-demo/rollback_record.json",
+      "artifacts": [
+        "artifacts/deployments/vton-catvton-2026-06-11-001-production-demo/rollback_record.json",
+        "artifacts/deployments/rollback_state.json",
+        "artifacts/eval/governance/governance_report.json"
+      ],
+      "metrics": [
+        { "label": "status", "value": "recorded", "tone": "green" },
+        { "label": "restore", "value": "previous", "tone": "green" },
+        { "label": "NIST gaps", "value": 0, "tone": "green" },
+        { "label": "OWASP gaps", "value": 0, "tone": "green" }
+      ],
+      "transcript": [
+        "Rollback restores the previous VTON champion after chaos burn-rate triggers.",
+        "Governance maps every required NIST AI RMF function and OWASP LLM Top 10 ID.",
+        "This step completes the offline professor walkthrough without requiring live GPU or network access."
+      ]
+    }
+  ]
+}

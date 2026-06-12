@@ -1,0 +1,14 @@
+FROM node:24-slim AS build
+
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/index.html web/tsconfig.json web/tsconfig.node.json web/vite.config.ts ./
+COPY web/src ./src
+RUN npm run build
+
+FROM nginx:alpine
+
+COPY --from=build /web/dist /usr/share/nginx/html
+EXPOSE 80
+HEALTHCHECK --interval=10s --timeout=3s --retries=5 CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1

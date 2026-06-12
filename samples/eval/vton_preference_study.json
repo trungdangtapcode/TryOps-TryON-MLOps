@@ -1,0 +1,73 @@
+{
+  "schema_version": "tryops.vton_preference_study.v1",
+  "study_id": "tryops-seeded-vton-preference-study-v1",
+  "notes": [
+    "Seeded local preference fixture for deterministic smoke testing.",
+    "This is not a substitute for a representative human panel before production launch."
+  ],
+  "preferences": [
+    {
+      "winner": "naive_standard",
+      "loser": "naive_wide_lower",
+      "weight": 1.0
+    },
+    {
+      "winner": "naive_standard",
+      "loser": "naive_wide_lower",
+      "weight": 1.0
+    },
+    {
+      "winner": "naive_standard",
+      "loser": "naive_wide_lower",
+      "weight": 1.0
+    },
+    {
+      "winner": "naive_standard",
+      "loser": "naive_wide_lower",
+      "weight": 1.0
+    },
+    {
+      "winner": "naive_wide_lower",
+      "loser": "naive_standard",
+      "weight": 0.5
+    }
+  ],
+  "fairness_slices": [
+    {
+      "slice_id": "light-straight",
+      "skin_tone": "light",
+      "body_type": "straight",
+      "quality": 0.87
+    },
+    {
+      "slice_id": "light-curvy",
+      "skin_tone": "light",
+      "body_type": "curvy",
+      "quality": 0.85
+    },
+    {
+      "slice_id": "medium-straight",
+      "skin_tone": "medium",
+      "body_type": "straight",
+      "quality": 0.86
+    },
+    {
+      "slice_id": "medium-broad",
+      "skin_tone": "medium",
+      "body_type": "broad",
+      "quality": 0.84
+    },
+    {
+      "slice_id": "deep-curvy",
+      "skin_tone": "deep",
+      "body_type": "curvy",
+      "quality": 0.83
+    },
+    {
+      "slice_id": "deep-broad",
+      "skin_tone": "deep",
+      "body_type": "broad",
+      "quality": 0.82
+    }
+  ]
+}

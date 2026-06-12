@@ -1,0 +1,22 @@
+{
+  "dataset_id": "vitonhd-demo-v1",
+  "source": "public-demo-placeholder",
+  "license": "document-before-real-use",
+  "entries": [
+    {
+      "id": "demo-person-001-garment-001",
+      "path": "data/raw/demo/person-001.png",
+      "split": "demo",
+      "checksum": "sha256:demo-person-001",
+      "license": "document-before-real-use"
+    },
+    {
+      "id": "calibration-prompt-001",
+      "path": "data/raw/calibration/prompt-001.json",
+      "split": "calibration",
+      "checksum": "sha256:calibration-prompt-001",
+      "license": "document-before-real-use"
+    }
+  ]
+}
+

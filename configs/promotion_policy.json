@@ -1,0 +1,47 @@
+{
+  "required_artifacts": ["model_card", "data_card", "evaluation_report", "sbom", "model_provenance"],
+  "required_approvals": {
+    "staging": ["mlops_owner"],
+    "champion": ["mlops_owner", "risk_owner"]
+  },
+  "accepted_risk_statuses": ["low", "medium_approved"],
+  "security": {
+    "max_critical_vulnerabilities": 0,
+    "max_high_vulnerabilities": 0
+  },
+  "guardrails": {
+    "required_for_workloads": ["llm"],
+    "required_artifact": "guardrail_report",
+    "accepted_verdicts": ["passed"],
+    "max_failed_cases": 0
+  },
+  "model_artifacts": {
+    "required_for_workloads": ["vton", "llm"],
+    "required_artifact": "model_artifact_scan",
+    "serialization_policy": "safetensors_only",
+    "max_unsafe_files": 0,
+    "min_safetensors_files": 1
+  },
+  "model_provenance": {
+    "required_for_workloads": ["vton", "llm"],
+    "required_artifact": "model_provenance",
+    "accepted_statuses": ["passed"],
+    "statement_type": "https://in-toto.io/Statement/v1",
+    "predicate_type": "https://slsa.dev/provenance/v1",
+    "accepted_signature_modes": ["local-dsse-digest", "sigstore-keyless-oidc"]
+  },
+  "metric_gates": {
+    "vton": {
+      "garment_fidelity": {"min": 0.72},
+      "identity_preservation": {"min": 0.70},
+      "artifact_rate": {"max": 0.12},
+      "latency_p95_ms": {"max": 12000}
+    },
+    "llm": {
+      "quality_score": {"min": 0.78},
+      "tokens_per_second": {"min": 20},
+      "latency_p95_ms": {"max": 2500},
+      "memory_gb": {"max": 16}
+    }
+  }
+}

@@ -1,0 +1,30 @@
+FROM node:24-slim AS web-builder
+
+WORKDIR /web
+COPY web/package.json web/package-lock.json ./
+RUN npm ci
+COPY web/index.html web/tsconfig.json web/tsconfig.node.json web/vite.config.ts ./
+COPY web/src ./src
+RUN npm run build
+
+FROM rust:1-slim AS builder
+
+WORKDIR /build
+COPY native/rust/tryops-gateway/Cargo.toml native/rust/tryops-gateway/Cargo.lock ./
+COPY native/rust/tryops-gateway/src ./src
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=builder /build/target/release/tryops-gateway /usr/local/bin/tryops-gateway
+COPY --from=web-builder /web/dist /opt/tryops/web
+COPY configs/api_keys.json /opt/tryops/configs/api_keys.json
+ENV TRYOPS_GATEWAY_STATIC_DIR=/opt/tryops/web
+ENV TRYOPS_GATEWAY_API_KEYS_PATH=/opt/tryops/configs/api_keys.json
+EXPOSE 8081
+
+CMD ["tryops-gateway"]

@@ -1,0 +1,39 @@
+groups:
+- name: tryops-enterprise-alerts
+  rules:
+  - alert: TryOpsLLMLatencyRegression
+    expr: tryops_llm_latency_p95_ms > 100.0
+    for: 10m
+    labels:
+      severity: warning
+      workload: llm
+    annotations:
+      summary: LLM latency p95 is above the release threshold
+      runbook_url: docs/observability_contract.md
+  - alert: TryOpsVTONLatencyRegression
+    expr: tryops_vton_latency_ms > 5000.0
+    for: 10m
+    labels:
+      severity: warning
+      workload: vton
+    annotations:
+      summary: VTON latency is above the release threshold
+      runbook_url: docs/observability_contract.md
+  - alert: TryOpsLLMQualityRegression
+    expr: tryops_llm_quality_score < 0.95
+    for: 10m
+    labels:
+      severity: page
+      workload: llm
+    annotations:
+      summary: LLM quality score is below the release threshold
+      runbook_url: docs/observability_contract.md
+  - alert: TryOpsVTONQualityRegression
+    expr: tryops_vton_garment_similarity < 0.8
+    for: 10m
+    labels:
+      severity: page
+      workload: vton
+    annotations:
+      summary: VTON garment similarity is below the release threshold
+      runbook_url: docs/observability_contract.md

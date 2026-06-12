@@ -1,0 +1,326 @@
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${TRYOPS_POSTGRES_USER:-tryops}
+      POSTGRES_PASSWORD_FILE: /run/secrets/tryops_postgres_password
+      POSTGRES_DB: ${TRYOPS_POSTGRES_DB:-tryops}
+    secrets:
+      - tryops_postgres_password
+    ports:
+      - "${TRYOPS_POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    restart: unless-stopped
+    command: ["valkey-server", "--appendonly", "yes"]
+    ports:
+      - "${TRYOPS_VALKEY_PORT:-16379}:6379"
+    volumes:
+      - valkey-data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER_FILE: /run/secrets/tryops_minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/tryops_minio_root_password
+    secrets:
+      - tryops_minio_root_user
+      - tryops_minio_root_password
+    ports:
+      - "${TRYOPS_MINIO_PORT:-9000}:9000"
+      - "${TRYOPS_MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio-data:/data
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    restart: unless-stopped
+    command:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        POSTGRES_PASSWORD="$$(cat /run/secrets/tryops_postgres_password)"
+        AWS_ACCESS_KEY_ID="$$(cat /run/secrets/tryops_minio_root_user)"
+        AWS_SECRET_ACCESS_KEY="$$(cat /run/secrets/tryops_minio_root_password)"
+        export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY
+        exec mlflow server \
+          --host 0.0.0.0 \
+          --port 5000 \
+          --backend-store-uri "postgresql://$${TRYOPS_POSTGRES_USER}:$${POSTGRES_PASSWORD}@postgres:5432/$${TRYOPS_POSTGRES_DB}" \
+          --default-artifact-root s3://tryops-artifacts/mlflow
+    environment:
+      TRYOPS_POSTGRES_USER: ${TRYOPS_POSTGRES_USER:-tryops}
+      TRYOPS_POSTGRES_DB: ${TRYOPS_POSTGRES_DB:-tryops}
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+    secrets:
+      - tryops_postgres_password
+      - tryops_minio_root_user
+      - tryops_minio_root_password
+    ports:
+      - "${TRYOPS_MLFLOW_PORT:-5000}:5000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:latest
+    restart: unless-stopped
+    ports:
+      - "${TRYOPS_PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/tryops_alerts.yml:/etc/prometheus/tryops_alerts.yml:ro
+      - ./infra/prometheus/tryops_burn_rate_alerts.yml:/etc/prometheus/tryops_burn_rate_alerts.yml:ro
+      - ./infra/prometheus/tryops_finops_alerts.yml:/etc/prometheus/tryops_finops_alerts.yml:ro
+    depends_on:
+      otel-collector:
+        condition: service_started
+      alertmanager:
+        condition: service_started
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+      - --web.listen-address=0.0.0.0:9093
+    ports:
+      - "${TRYOPS_ALERTMANAGER_PORT:-9093}:9093"
+    volumes:
+      - ./infra/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+    healthcheck:
+      test: ["CMD", "amtool", "check-config", "/etc/alertmanager/alertmanager.yml"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    restart: unless-stopped
+    command: ["--config=/etc/otelcol-contrib/config.yml"]
+    ports:
+      - "${TRYOPS_OTEL_GRPC_PORT:-4317}:4317"
+      - "${TRYOPS_OTEL_HTTP_PORT:-4318}:4318"
+      - "${TRYOPS_OTEL_METRICS_PORT:-8888}:8888"
+      - "${TRYOPS_OTEL_HEALTH_PORT:-13133}:13133"
+    volumes:
+      - ./infra/otel/collector.yml:/etc/otelcol-contrib/config.yml:ro
+      - ./artifacts/logs:/var/log/tryops:ro
+      - ./artifacts/otel:/var/lib/tryops/otel
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otelcol-contrib/config.yml"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    restart: unless-stopped
+    ports:
+      - "${TRYOPS_GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  guardrail:
+    build:
+      context: .
+      dockerfile: Dockerfile.guardrail
+    restart: unless-stopped
+    environment:
+      TRYOPS_GUARDRAIL_ADDR: ":18083"
+    ports:
+      - "${TRYOPS_GUARDRAIL_PORT:-18083}:18083"
+
+  controller:
+    profiles: ["ops"]
+    build:
+      context: .
+      dockerfile: Dockerfile.controller
+    restart: unless-stopped
+    environment:
+      TRYOPS_CONTROLLER_ADDR: ":18082"
+    ports:
+      - "${TRYOPS_CONTROLLER_PORT:-18082}:18082"
+
+  benchmark:
+    profiles: ["tooling"]
+    build:
+      context: .
+      dockerfile: Dockerfile.benchmark
+    environment:
+      TRYOPS_BENCHMARK_PROFILE: container
+    volumes:
+      - ./artifacts/eval/gateway_benchmark:/tmp/tryops-benchmark-output
+
+  cpp-tools:
+    profiles: ["tooling"]
+    build:
+      context: .
+      dockerfile: Dockerfile.cpp-tools
+
+  web-assets:
+    profiles: ["assets"]
+    build:
+      context: .
+      dockerfile: Dockerfile.web-assets
+    ports:
+      - "${TRYOPS_WEB_ASSETS_PORT:-8088}:80"
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    restart: unless-stopped
+    environment:
+      TRYOPS_ENV: local
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      TRYOPS_GUARDRAIL_URL: http://guardrail:18083/v1/guardrails/evaluate
+      TRYOPS_STRUCTURED_LOG_PATH: /app/artifacts/logs/api_events.jsonl
+      TRYOPS_TRACE_SPAN_PATH: /app/artifacts/traces/api_spans.jsonl
+    ports:
+      - "${TRYOPS_API_PORT:-8080}:8080"
+    volumes:
+      - ./artifacts/eval:/app/artifacts/eval:ro
+      - ./artifacts/demo:/app/artifacts/demo:ro
+      - ./artifacts/deployments:/app/artifacts/deployments:ro
+      - ./artifacts/runtime:/app/artifacts/runtime
+      - ./artifacts/traces:/app/artifacts/traces
+      - ./artifacts/logs:/app/artifacts/logs
+      - ./reports/generated:/app/reports/generated:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      - mlflow
+      - guardrail
+
+  gateway:
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    restart: unless-stopped
+    environment:
+      TRYOPS_GATEWAY_ADDR: 0.0.0.0:8081
+      TRYOPS_GATEWAY_UPSTREAM: http://api:8080
+      TRYOPS_GATEWAY_GUARDRAIL_URL: http://guardrail:18083/v1/guardrails/evaluate
+      TRYOPS_GATEWAY_STATIC_DIR: /opt/tryops/web
+      TRYOPS_GATEWAY_API_KEYS_PATH: /opt/tryops/configs/api_keys.json
+      TRYOPS_GATEWAY_MAX_BODY_BYTES: "4194304"
+      TRYOPS_GATEWAY_RATE_LIMIT_PER_MINUTE: "600"
+      TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN_FILE: /run/secrets/tryops_gateway_quota_postgres_dsn
+      TRYOPS_GATEWAY_QUOTA_VALKEY_ADDR: valkey:6379
+      TRYOPS_GATEWAY_QUOTA_VALKEY_PREFIX: tryops
+      TRYOPS_GATEWAY_HEALTH_ADDR: 127.0.0.1:8081
+      TRYOPS_GATEWAY_STRUCTURED_LOG_PATH: /var/log/tryops/gateway_events.jsonl
+    ports:
+      - "${TRYOPS_GATEWAY_PORT:-8081}:8081"
+    volumes:
+      - ./artifacts/logs:/var/log/tryops
+    secrets:
+      - tryops_gateway_quota_postgres_dsn
+    healthcheck:
+      test: ["CMD", "tryops-gateway", "health-check"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      guardrail:
+        condition: service_started
+      api:
+        condition: service_healthy
+
+  gateway-tls:
+    profiles: ["tls"]
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    restart: unless-stopped
+    environment:
+      TRYOPS_GATEWAY_ADDR: 0.0.0.0:8443
+      TRYOPS_GATEWAY_UPSTREAM: http://api:8080
+      TRYOPS_GATEWAY_GUARDRAIL_URL: http://guardrail:18083/v1/guardrails/evaluate
+      TRYOPS_GATEWAY_STATIC_DIR: /opt/tryops/web
+      TRYOPS_GATEWAY_API_KEYS_PATH: /opt/tryops/configs/api_keys.json
+      TRYOPS_GATEWAY_MAX_BODY_BYTES: "4194304"
+      TRYOPS_GATEWAY_RATE_LIMIT_PER_MINUTE: "600"
+      TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN_FILE: /run/secrets/tryops_gateway_quota_postgres_dsn
+      TRYOPS_GATEWAY_QUOTA_VALKEY_ADDR: valkey:6379
+      TRYOPS_GATEWAY_QUOTA_VALKEY_PREFIX: tryops
+      TRYOPS_GATEWAY_HEALTH_ADDR: 127.0.0.1:8443
+      TRYOPS_GATEWAY_STRUCTURED_LOG_PATH: /var/log/tryops/gateway_tls_events.jsonl
+      TRYOPS_GATEWAY_TLS_CERT_PATH: /run/secrets/tryops_tls_cert
+      TRYOPS_GATEWAY_TLS_KEY_PATH: /run/secrets/tryops_tls_key
+    ports:
+      - "${TRYOPS_GATEWAY_TLS_PORT:-8443}:8443"
+    volumes:
+      - ./artifacts/logs:/var/log/tryops
+    secrets:
+      - tryops_gateway_quota_postgres_dsn
+      - tryops_tls_cert
+      - tryops_tls_key
+    healthcheck:
+      test: ["CMD-SHELL", "TRYOPS_GATEWAY_HEALTH_SCHEME=https TRYOPS_GATEWAY_HEALTH_ADDR=127.0.0.1:8443 TRYOPS_GATEWAY_HEALTH_INSECURE=true tryops-gateway health-check"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    depends_on:
+      postgres:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      guardrail:
+        condition: service_started
+      api:
+        condition: service_healthy
+
+volumes:
+  alertmanager-data:
+  postgres-data:
+  valkey-data:
+  minio-data:
+  grafana-data:
+
+secrets:
+  tryops_postgres_password:
+    environment: TRYOPS_POSTGRES_PASSWORD
+  tryops_minio_root_user:
+    environment: TRYOPS_MINIO_ROOT_USER
+  tryops_minio_root_password:
+    environment: TRYOPS_MINIO_ROOT_PASSWORD
+  tryops_gateway_quota_postgres_dsn:
+    environment: TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN
+  tryops_tls_cert:
+    environment: TRYOPS_TLS_CERT_PEM
+  tryops_tls_key:
+    environment: TRYOPS_TLS_KEY_PEM

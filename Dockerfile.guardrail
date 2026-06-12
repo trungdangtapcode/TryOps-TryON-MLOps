@@ -1,0 +1,12 @@
+FROM golang:1.22-alpine AS build
+
+WORKDIR /src
+COPY native/go/tryops-guardrail/go.mod ./
+COPY native/go/tryops-guardrail/*.go ./
+RUN CGO_ENABLED=0 GOFLAGS=-mod=mod go build -buildvcs=false -o /out/tryops_guardrail .
+
+FROM scratch
+
+COPY --from=build /out/tryops_guardrail /tryops_guardrail
+EXPOSE 18083
+ENTRYPOINT ["/tryops_guardrail", "serve"]

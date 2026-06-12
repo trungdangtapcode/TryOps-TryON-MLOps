@@ -1,0 +1,20 @@
+FROM gcc:13 AS build
+
+WORKDIR /src
+COPY native/cpp ./native/cpp
+RUN mkdir -p /out \
+    && g++ -std=c++17 -O2 -Wall -Wextra -pedantic -Inative/cpp/tryops_policy/include native/cpp/tryops_policy/src/tryops_policy.cpp native/cpp/tryops_policy/src/tryops_policy_cli.cpp -o /out/tryops_policy_cli \
+    && g++ -std=c++17 -O2 -Wall -Wextra -pedantic native/cpp/tryops_image_metrics/src/tryops_image_metrics_cli.cpp -o /out/tryops_image_metrics_cli \
+    && g++ -std=c++17 -O2 -Wall -Wextra -pedantic native/cpp/tryops_vton_preprocess/src/tryops_vton_preprocess_cli.cpp -o /out/tryops_vton_preprocess_cli \
+    && g++ -std=c++17 -O2 -Wall -Wextra -pedantic -Inative/cpp/tryops_semantic_cache/include native/cpp/tryops_semantic_cache/src/tryops_semantic_cache.cpp native/cpp/tryops_semantic_cache/src/tryops_semantic_cache_cli.cpp -o /out/tryops_semantic_cache_cli \
+    && g++ -std=c++17 -O2 -Wall -Wextra -pedantic -Inative/cpp/tryops_gguf_preflight/include native/cpp/tryops_gguf_preflight/src/tryops_gguf_preflight.cpp native/cpp/tryops_gguf_preflight/src/tryops_gguf_preflight_cli.cpp -o /out/tryops_gguf_preflight_cli \
+    && g++ -std=c++17 -O2 -Wall -Wextra -pedantic -Inative/cpp/tryops_trace_envelope/include native/cpp/tryops_trace_envelope/src/tryops_trace_envelope.cpp native/cpp/tryops_trace_envelope/src/tryops_trace_envelope_cli.cpp -o /out/tryops_trace_envelope_cli
+
+FROM debian:bookworm-slim
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates libstdc++6 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /out/tryops_* /usr/local/bin/
+ENTRYPOINT ["/bin/sh", "-lc"]
+CMD ["ls -1 /usr/local/bin/tryops_*"]

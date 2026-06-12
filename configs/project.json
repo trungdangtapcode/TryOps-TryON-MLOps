@@ -1,0 +1,17 @@
+{
+  "project_name": "TryOps",
+  "theme": "Enterprise MLOps for VTON and optimized LLM serving",
+  "environment_order": ["local", "staging", "production_demo"],
+  "workloads": ["vton", "llm"],
+  "registry": {
+    "tracking": "mlflow",
+    "artifact_store": "minio",
+    "model_aliases": ["candidate", "challenger", "champion", "archived", "rejected"]
+  },
+  "observability": {
+    "metrics": "prometheus",
+    "dashboards": "grafana",
+    "traces": "opentelemetry"
+  }
+}
+

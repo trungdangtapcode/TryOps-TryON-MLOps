@@ -1,0 +1,37 @@
+{
+  "schema_version": "tryops.native_trace_log_envelope.schema.v1",
+  "contract": "tryops.native_trace_log_envelope.v1",
+  "research_basis": [
+    "W3C Trace Context traceparent fields: version, trace-id, parent-id/span-id, trace-flags.",
+    "OpenTelemetry Log Data Model fields: Timestamp, ObservedTimestamp, SeverityText, SeverityNumber, TraceId, SpanId, TraceFlags, Resource, Attributes, EventName.",
+    "OpenTelemetry Resource semantic conventions: service.name is required when known, service.version identifies deployed code."
+  ],
+  "required_fields": [
+    "schema_version",
+    "timestamp",
+    "observed_timestamp",
+    "language",
+    "runtime",
+    "component",
+    "event_name",
+    "severity_text",
+    "severity_number",
+    "trace_id",
+    "span_id",
+    "trace_flags",
+    "traceparent",
+    "request_id",
+    "workload",
+    "resource",
+    "attributes"
+  ],
+  "constraints": {
+    "trace_id": "32 lowercase hex characters and not all zeroes",
+    "span_id": "16 lowercase hex characters and not all zeroes",
+    "trace_flags": "2 lowercase hex characters",
+    "traceparent": "00-{trace_id}-{span_id}-{trace_flags}",
+    "resource": "must include service.name and service.version",
+    "attributes": "must contain sanitized metadata only; raw prompt text, customer IDs, absolute image paths, secrets, and tokens are not allowed"
+  },
+  "languages": ["rust", "go", "cpp", "fastapi"]
+}

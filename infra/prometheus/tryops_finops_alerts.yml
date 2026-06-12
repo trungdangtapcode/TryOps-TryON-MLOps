@@ -1,0 +1,30 @@
+groups:
+- name: tryops-finops-alerts
+  rules:
+  - alert: TryOpsTenantBudgetWarning
+    expr: max(tryops_budget_utilization_ratio) > 0.8
+    for: 15m
+    labels:
+      severity: warning
+      workload: finops
+    annotations:
+      summary: Tenant projected spend is above the budget warning threshold
+      runbook_url: docs/finops_semantic_cache.md
+  - alert: TryOpsTenantBudgetHardLimit
+    expr: max(tryops_budget_utilization_ratio) >= 1.0
+    for: 5m
+    labels:
+      severity: page
+      workload: finops
+    annotations:
+      summary: Tenant projected spend reached the hard budget limit
+      runbook_url: docs/finops_semantic_cache.md
+  - alert: TryOpsSemanticCacheHitRateLow
+    expr: sum(rate(tryops_semantic_cache_requests_total{result="hit"}[1h])) / clamp_min(sum(rate(tryops_semantic_cache_requests_total[1h])), 1) < 0.2
+    for: 30m
+    labels:
+      severity: warning
+      workload: llm
+    annotations:
+      summary: LLM semantic-cache hit rate is below the expected optimization threshold
+      runbook_url: docs/finops_semantic_cache.md
