@@ -10,6 +10,7 @@ export type ViewKey =
   | "runs"
   | "registry"
   | "evaluations"
+  | "experiments"
   | "governance"
   | "incidents";
 
@@ -123,6 +124,105 @@ export interface QuotaDimension {
   utilization_pct: number;
   unit_price_usd?: number;
   showback_usd: number;
+}
+
+export interface ExperimentVariant {
+  name: string;
+  adapter?: string;
+  allocation_percent?: number;
+  impressions: number;
+  rewards: number;
+  guardrail_block_rate?: number;
+  latency_p95_ms?: number;
+  error_rate?: number;
+}
+
+export interface ExperimentDecision {
+  mode: string;
+  routing_mode?: string;
+  workload?: string;
+  request_id?: string;
+  experiment_id: string;
+  requested_alias?: string;
+  primary_alias: string;
+  primary_adapter: string;
+  reason: string;
+  bucket?: number;
+  experiment: {
+    schema_version: string;
+    available?: boolean;
+    source?: string;
+    mode: string;
+    holdback?: boolean;
+    selected?: {
+      variant: string;
+      adapter: string;
+      reason: string;
+    };
+    variants: Array<{
+      name: string;
+      eligible: boolean;
+      traffic_percent: number;
+      reward_rate?: number;
+      ucb_score?: number;
+      violations?: string[];
+      guardrail_block_rate?: number;
+      latency_p95_ms?: number;
+      error_rate?: number;
+    }>;
+  };
+}
+
+export interface ExperimentAnalysis {
+  schema_version: string;
+  available?: boolean;
+  source?: string;
+  experiment_id: string;
+  best_variant?: string;
+  holdback?: {
+    name: string;
+    impressions: number;
+    rewards: number;
+    rate?: number;
+  };
+  variants?: Array<{
+    name: string;
+    impressions: number;
+    rewards: number;
+    rate: number;
+    uplift_absolute: number;
+    uplift_relative: number;
+    uplift_ci: {
+      lo: number;
+      hi: number;
+      excludes_zero: boolean;
+    };
+    sequential: {
+      early_stop: boolean;
+      verdict: string;
+      reason: string;
+    };
+  }>;
+}
+
+export interface ExperimentConsole {
+  schema_version: string;
+  experiment_id: string;
+  production_ready: boolean;
+  routing_report?: {
+    schema_version: string;
+    passed?: boolean;
+    algorithm?: string;
+    decisions?: {
+      ab?: ExperimentDecision;
+      bandit?: ExperimentDecision;
+    };
+  };
+  analysis_report?: {
+    schema_version: string;
+    passed?: boolean;
+    native_experiment_stats?: ExperimentAnalysis;
+  };
 }
 
 export interface RequestRecord {

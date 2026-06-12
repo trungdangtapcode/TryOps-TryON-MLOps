@@ -8,6 +8,7 @@ import {
   History,
   Images,
   ShieldAlert,
+  Shuffle,
   Workflow
 } from "lucide-react";
 import type { ModelCandidate, NavItem, ProfessorDemoMetric, ProfessorDemoStep } from "./types";
@@ -22,6 +23,7 @@ export const navItems: NavItem[] = [
   { key: "runs", label: "Runs", icon: Workflow, requiredScope: "admin:read" },
   { key: "registry", label: "Registry", icon: Boxes, requiredScope: "admin:read" },
   { key: "evaluations", label: "Evaluations", icon: BarChart3, requiredScope: "admin:read" },
+  { key: "experiments", label: "Experiments", icon: Shuffle, requiredScope: "admin:read" },
   { key: "governance", label: "Governance", icon: CircuitBoard, requiredScope: "lineage:read" },
   { key: "incidents", label: "Incidents", icon: ShieldAlert, requiredScope: "promotion:evaluate" }
 ];
@@ -29,6 +31,39 @@ export const navItems: NavItem[] = [
 export const llmVariants = ["baseline", "champion", "challenger", "candidate"];
 export const quotaPlans = ["free", "team", "enterprise"];
 export const vtonAliases = ["champion", "challenger", "candidate"];
+
+export const experimentVariants = [
+  {
+    name: "champion",
+    adapter: "tryops-rule-baseline",
+    allocation_percent: 45,
+    impressions: 1000,
+    rewards: 820,
+    guardrail_block_rate: 0.002,
+    latency_p95_ms: 42,
+    error_rate: 0.002
+  },
+  {
+    name: "challenger",
+    adapter: "tryops-rule-baseline",
+    allocation_percent: 45,
+    impressions: 500,
+    rewards: 465,
+    guardrail_block_rate: 0.004,
+    latency_p95_ms: 38,
+    error_rate: 0.003
+  },
+  {
+    name: "candidate",
+    adapter: "tryops-rule-baseline",
+    allocation_percent: 10,
+    impressions: 50,
+    rewards: 49,
+    guardrail_block_rate: 0.08,
+    latency_p95_ms: 35,
+    error_rate: 0.003
+  }
+];
 
 export const rollbackStatePath = "artifacts/deployments/rollback_state.json";
 

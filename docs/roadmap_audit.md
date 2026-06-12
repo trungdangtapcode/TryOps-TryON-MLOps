@@ -453,6 +453,12 @@ This verifies:
   contains `optimization_panel` with the recommended LLM variant, leaderboard rank, Pareto-frontier
   state, per-variant VRAM/energy/SCI, and carbon-gate verdict; the React Evaluation view renders the
   interactive panel; and `make app-smoke` verifies the payload through the Rust gateway.
+- Production online experimentation surface: FastAPI accepts `experiment_ab` and `experiment_bandit`
+  on `/api/llm/generate`, exposes `/api/experiments/route`, `/api/experiments/analyze`, and
+  `/api/experiments/summary`, and delegates guarded A/B plus UCB bandit routing to the native C++
+  `tryops_experiment_router` when present. The React Console now includes an Experiments board and
+  the LLM Playground can exercise the production experiment path; focused API tests verify RBAC,
+  guarded candidate blocking, and LLM generation through `experiment_bandit`.
 - Rust gateway auth preflight: `native/rust/tryops-gateway/src/auth.rs` validates scoped API keys and
   optional HS256 JWTs before proxying protected routes to FastAPI; Docker builds the gateway image
   with `configs/api_keys.json`; and `artifacts/eval/full_stack/full_stack_smoke.json` proves

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { TryOpsClient } from "./api";
 import { AppShell } from "./components/AppShell";
 import { DashboardView } from "./components/DashboardView";
+import { ExperimentView } from "./components/ExperimentView";
 import { GovernanceView } from "./components/GovernanceView";
 import { HistoryView } from "./components/HistoryView";
 import { IncidentView } from "./components/IncidentView";
@@ -11,7 +12,7 @@ import { ProfessorDemoView } from "./components/ProfessorDemoView";
 import { RegistryView } from "./components/RegistryView";
 import { VtonStudio } from "./components/VtonStudio";
 import { EvaluationView } from "./components/EvaluationView";
-import type { AuthSession, DashboardSummary, EvaluationIndex, ModelRecord, QuotaReadModel, RequestRecord, ViewKey } from "./types";
+import type { AuthSession, DashboardSummary, EvaluationIndex, ExperimentConsole, ModelRecord, QuotaReadModel, RequestRecord, ViewKey } from "./types";
 
 const API_KEY_STORAGE = "tryops.console.api_key";
 
@@ -23,6 +24,7 @@ export function App() {
   const [requests, setRequests] = useState<RequestRecord[]>([]);
   const [models, setModels] = useState<ModelRecord[]>([]);
   const [evaluations, setEvaluations] = useState<EvaluationIndex | undefined>();
+  const [experiments, setExperiments] = useState<ExperimentConsole | undefined>();
   const [quota, setQuota] = useState<QuotaReadModel | undefined>();
   const [session, setSession] = useState<AuthSession | undefined>();
   const [lastError, setLastError] = useState<string | undefined>();
@@ -62,7 +64,8 @@ export function App() {
       client.quotaSummary(),
       client.history(),
       client.models(),
-      client.evaluations()
+      client.evaluations(),
+      client.experiments()
     ]);
     if (outcomes[0].status === "fulfilled") {
       setDashboard(outcomes[0].value);
@@ -78,6 +81,9 @@ export function App() {
     }
     if (outcomes[4].status === "fulfilled") {
       setEvaluations(outcomes[4].value);
+    }
+    if (outcomes[5].status === "fulfilled") {
+      setExperiments(outcomes[5].value);
     }
     const rejected = outcomes.find((outcome) => outcome.status === "rejected");
     if (rejected?.status === "rejected") {
@@ -116,6 +122,8 @@ export function App() {
         return <RegistryView models={models} />;
       case "evaluations":
         return <EvaluationView index={evaluations} onRefresh={refreshConsole} />;
+      case "experiments":
+        return <ExperimentView client={client} experiments={experiments} onRefresh={refreshConsole} />;
       case "governance":
         return <GovernanceView client={client} requests={requests} models={models} />;
       case "incidents":

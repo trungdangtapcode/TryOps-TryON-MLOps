@@ -16,7 +16,7 @@ REQUIRED_RBAC_ROLES = {"viewer", "operator", "admin"}
 FORBIDDEN_SECRET_FIELDS = {"api_key", "raw_key", "secret", "token", "password"}
 PUBLIC_NAV_ITEMS = ("demo", "llm", "vton")
 SCOPE_NAV_ITEMS = {
-    "admin:read": ("dashboard", "history", "runs", "registry", "evaluations"),
+    "admin:read": ("dashboard", "history", "runs", "registry", "evaluations", "experiments"),
     "lineage:read": ("governance",),
     "promotion:evaluate": ("incidents",),
 }

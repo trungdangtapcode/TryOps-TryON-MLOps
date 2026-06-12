@@ -2,6 +2,10 @@ import type {
   AuthSession,
   DashboardSummary,
   EvaluationIndex,
+  ExperimentAnalysis,
+  ExperimentConsole,
+  ExperimentDecision,
+  ExperimentVariant,
   IncidentWorkflowReport,
   LlmGenerationResponse,
   ModelCandidate,
@@ -21,7 +25,7 @@ export interface LlmPayload {
   model_alias: string;
   max_tokens: number;
   structured: boolean;
-  routing_mode: "direct" | "canary";
+  routing_mode: "direct" | "canary" | "experiment_ab" | "experiment_bandit";
   canary_percent: number;
   shadow: boolean;
   optimized_available: boolean;
@@ -29,6 +33,10 @@ export interface LlmPayload {
   semantic_cache_enabled: boolean;
   user_id: string;
   quota_plan: string;
+  experiment_id?: string;
+  experiment_holdback_percent?: number;
+  experiment_variants?: ExperimentVariant[];
+  experiment_guardrail_thresholds?: Record<string, number>;
 }
 
 export interface VtonPayload {
@@ -97,6 +105,48 @@ export class TryOpsClient {
     const response = await this.get<{ data: EvaluationIndex }>("/api/evaluations/summary", true);
     if (!response.data) {
       throw new Error("Evaluation index unavailable");
+    }
+    return response.data;
+  }
+
+  async experiments(): Promise<ExperimentConsole> {
+    const response = await this.get<{ data: ExperimentConsole }>("/api/experiments/summary", true);
+    if (!response.data) {
+      throw new Error("Experiment evidence unavailable");
+    }
+    return response.data;
+  }
+
+  async routeExperiment(payload: {
+    mode: "ab" | "bandit";
+    request_id: string;
+    experiment_id: string;
+    variants: ExperimentVariant[];
+    holdback_percent: number;
+    guardrail_thresholds: Record<string, number>;
+  }): Promise<ExperimentDecision> {
+    const response = await this.post<{ data: ExperimentDecision }>("/api/experiments/route", {
+      ...payload,
+      api_key: this.apiKey.trim(),
+      workload: "llm"
+    });
+    if (!response.data) {
+      throw new Error("Experiment route unavailable");
+    }
+    return response.data;
+  }
+
+  async analyzeExperiment(payload: {
+    experiment_id: string;
+    holdback: { name: string; impressions: number; rewards: number };
+    variants: ExperimentVariant[];
+  }): Promise<ExperimentAnalysis> {
+    const response = await this.post<{ data: ExperimentAnalysis }>("/api/experiments/analyze", {
+      ...payload,
+      api_key: this.apiKey.trim()
+    });
+    if (!response.data) {
+      throw new Error("Experiment analysis unavailable");
     }
     return response.data;
   }

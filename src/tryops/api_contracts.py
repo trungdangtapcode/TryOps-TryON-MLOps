@@ -6,6 +6,12 @@ from typing import Any
 from uuid import uuid4
 
 from tryops.pipelines.llm_baseline import SUPPORTED_MODEL_ALIASES
+from tryops.experiments import (
+    DEFAULT_EXPERIMENT_HOLDBACK_PERCENT,
+    DEFAULT_EXPERIMENT_ID,
+    normalize_experiment_variants,
+    normalize_guardrail_thresholds,
+)
 from tryops.quota import SUPPORTED_QUOTA_PLANS
 from tryops.routing import SUPPORTED_VTON_ALIASES
 
@@ -109,8 +115,13 @@ def validate_llm_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[
         errors.append({"field": "structured", "message": "structured must be a boolean"})
 
     routing_mode = str(payload.get("routing_mode", "direct"))
-    if routing_mode not in {"direct", "canary"}:
-        errors.append({"field": "routing_mode", "message": "routing_mode must be 'direct' or 'canary'"})
+    if routing_mode not in {"direct", "canary", "experiment_ab", "experiment_bandit"}:
+        errors.append(
+            {
+                "field": "routing_mode",
+                "message": "routing_mode must be 'direct', 'canary', 'experiment_ab', or 'experiment_bandit'",
+            }
+        )
 
     canary_percent = payload.get("canary_percent", 0.0)
     try:
@@ -155,6 +166,26 @@ def validate_llm_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[
         errors.append({"field": "quota_plan", "message": f"quota_plan must be one of {sorted(SUPPORTED_QUOTA_PLANS)}"})
 
     timeout_ms_int = _validate_timeout_ms(payload, errors)
+    experiment_id = str(payload.get("experiment_id", DEFAULT_EXPERIMENT_ID)).strip() or DEFAULT_EXPERIMENT_ID
+    holdback_percent = payload.get("experiment_holdback_percent", DEFAULT_EXPERIMENT_HOLDBACK_PERCENT)
+    try:
+        holdback_percent_float = float(holdback_percent)
+    except (TypeError, ValueError):
+        holdback_percent_float = -1.0
+        errors.append({"field": "experiment_holdback_percent", "message": "experiment_holdback_percent must be numeric"})
+    if holdback_percent_float < 0.0 or holdback_percent_float > 95.0:
+        errors.append({"field": "experiment_holdback_percent", "message": "experiment_holdback_percent must be between 0 and 95"})
+
+    try:
+        experiment_variants = normalize_experiment_variants(payload.get("experiment_variants"))
+    except ValueError as exc:
+        experiment_variants = []
+        errors.append({"field": "experiment_variants", "message": str(exc)})
+    try:
+        experiment_guardrail_thresholds = normalize_guardrail_thresholds(payload.get("experiment_guardrail_thresholds"))
+    except ValueError as exc:
+        experiment_guardrail_thresholds = {}
+        errors.append({"field": "experiment_guardrail_thresholds", "message": str(exc)})
 
     return (
         {
@@ -172,6 +203,10 @@ def validate_llm_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[
             "user_id": user_id,
             "quota_plan": quota_plan,
             "timeout_ms": timeout_ms_int,
+            "experiment_id": experiment_id,
+            "experiment_holdback_percent": holdback_percent_float,
+            "experiment_variants": experiment_variants,
+            "experiment_guardrail_thresholds": experiment_guardrail_thresholds,
         },
         errors,
     )
