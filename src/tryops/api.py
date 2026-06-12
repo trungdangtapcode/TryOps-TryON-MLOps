@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+import base64
+import binascii
 import json
 from pathlib import Path
 from time import perf_counter
 from typing import Any
+from uuid import uuid4
 
 from tryops.api_contracts import (
+    MAX_IMAGE_BYTES,
     attach_response_metadata,
     readiness_state,
     request_id_from_payload,
@@ -14,6 +18,7 @@ from tryops.api_contracts import (
     validate_vton_payload,
 )
 from tryops.artifacts import (
+    artifact_url,
     artifact_media_type,
     load_json_artifact,
     resolve_artifact_path,
@@ -41,14 +46,17 @@ from tryops.quota import check_and_record_quota
 from tryops.quota_read_model import load_quota_read_model
 from tryops.routing import build_experiment_routing_decision, build_routing_decision
 from tryops.semantic_cache import GLOBAL_SEMANTIC_CACHE, build_cache_metadata
+from tryops.simple_image import PNG_SIGNATURE, read_png_rgb, write_png_rgb
 from tryops.timeouts import RequestTimeoutError, run_with_timeout, timeout_details
 from tryops.vton_native_bridge import build_native_vton_execution_evidence
 
 try:
     from fastapi import FastAPI, Response
+    from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse
 except ImportError:  # pragma: no cover - optional runtime dependency
     FastAPI = None  # type: ignore[assignment]
+    CORSMiddleware = None  # type: ignore[assignment]
     Response = None  # type: ignore[assignment]
     FileResponse = None  # type: ignore[assignment]
 
@@ -64,6 +72,13 @@ def create_app() -> Any:
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        allow_credentials=False,
     )
 
     @app.get("/api/health")
@@ -178,6 +193,32 @@ def create_app() -> Any:
                 message=str(exc),
                 workload="lineage",
             )
+
+    @app.post("/api/vton/upload")
+    @app.post("/vton/upload")
+    @app.post("/v1/vton/upload")
+    def vton_upload(payload: dict[str, Any]) -> dict[str, Any]:
+        request_id = request_id_from_payload(payload)
+        auth = authorize_admin_payload(payload, required_scope="admin:read")
+        if not auth["allowed"]:
+            return _admin_auth_error(request_id, auth, "vton_upload")
+        try:
+            upload = _store_vton_upload(payload)
+        except ValueError as exc:
+            return structured_error(
+                request_id=request_id,
+                code="invalid_vton_upload",
+                message=str(exc),
+                workload="vton",
+            )
+        return {
+            "api_version": "v1",
+            "request_id": request_id,
+            "status": "uploaded",
+            "workload": "vton",
+            "data": upload,
+            "auth": auth,
+        }
 
     @app.post("/api/vton/infer")
     @app.post("/vton/infer")
@@ -865,6 +906,58 @@ def _record(
     finally:
         if 'conn' in locals():
             conn.close()
+
+
+def _store_vton_upload(payload: dict[str, Any]) -> dict[str, Any]:
+    data_url = payload.get("data_url")
+    if not isinstance(data_url, str) or not data_url.strip():
+        raise ValueError("data_url is required")
+
+    prefix = "data:image/png;base64,"
+    if not data_url.startswith(prefix):
+        raise ValueError("VTON upload must be a PNG data URL")
+
+    try:
+        uploaded_bytes = base64.b64decode(data_url[len(prefix) :], validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError("VTON upload is not valid base64") from exc
+    if len(uploaded_bytes) > MAX_IMAGE_BYTES:
+        raise ValueError(f"image exceeds {MAX_IMAGE_BYTES} byte limit")
+    if not uploaded_bytes.startswith(PNG_SIGNATURE):
+        raise ValueError("VTON upload is not a PNG image")
+
+    role = str(payload.get("role", "asset")).strip().lower()
+    if role not in {"person", "garment", "asset"}:
+        role = "asset"
+    filename = Path(str(payload.get("filename", "upload.png"))).name[:180] or "upload.png"
+    upload_id = uuid4().hex
+    upload_dir = Path("artifacts/runtime/vton/uploads")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    raw_path = upload_dir / f".{role}-{upload_id}.raw.png"
+    output_path = upload_dir / f"{role}-{upload_id}.png"
+
+    try:
+        raw_path.write_bytes(uploaded_bytes)
+        image = read_png_rgb(raw_path)
+        write_png_rgb(output_path, image)
+    except (OSError, ValueError) as exc:
+        output_path.unlink(missing_ok=True)
+        raise ValueError(f"uploaded image is not supported: {exc}") from exc
+    finally:
+        raw_path.unlink(missing_ok=True)
+
+    output = str(output_path)
+    return {
+        "path": output,
+        "url": artifact_url(output),
+        "role": role,
+        "filename": filename,
+        "content_type": "image/png",
+        "source_size_bytes": len(uploaded_bytes),
+        "size_bytes": output_path.stat().st_size,
+        "width": image.width,
+        "height": image.height,
+    }
 
 
 def _optional_json_artifact(path: str) -> dict[str, Any]:

@@ -25,6 +25,7 @@ TRYOPS_COSIGN_IMAGE ?= ghcr.io/sigstore/cosign/cosign:v2.4.1
 .PHONY: native-container-contract-build native-container-contract-test native-container-contract-sample
 .PHONY: native-distributed-quota-build native-distributed-quota-test native-distributed-quota-smoke
 .PHONY: native-quota-read-model-build native-quota-read-model-test native-quota-read-model-sample
+.PHONY: native-safety-build native-safety-test native-safety-sample
 .PHONY: native-runtime-telemetry-build native-runtime-telemetry-test native-runtime-telemetry-sample
 .PHONY: native-observability-contract-build native-observability-contract-test native-observability-contract-sample
 .PHONY: native-alertmanager-contract-build native-alertmanager-contract-test native-alertmanager-contract-sample
@@ -46,9 +47,9 @@ native-go-toolchain:
 prepare-container-artifacts:
 	@set -eu; \
 	uid=$$(id -u); gid=$$(id -g); \
-	mkdir -p artifacts/app artifacts/cache artifacts/logs artifacts/traces artifacts/runtime artifacts/runtime/vton artifacts/eval/full_stack artifacts/eval/jobs; \
-	if ! chown -R "$$uid:$$gid" artifacts/app artifacts/cache artifacts/logs artifacts/traces artifacts/runtime artifacts/eval/full_stack artifacts/eval/jobs 2>/dev/null; then \
-		docker run --rm -v "$(CURDIR)/artifacts:/work" alpine:3.20 sh -lc "chown -R $$uid:$$gid /work/app /work/cache /work/logs /work/traces /work/runtime /work/eval/full_stack /work/eval/jobs"; \
+	mkdir -p artifacts/app artifacts/cache artifacts/logs artifacts/otel artifacts/traces artifacts/runtime artifacts/runtime/vton artifacts/eval/full_stack artifacts/eval/jobs; \
+	if ! chown -R "$$uid:$$gid" artifacts/app artifacts/cache artifacts/logs artifacts/otel artifacts/traces artifacts/runtime artifacts/eval/full_stack artifacts/eval/jobs 2>/dev/null; then \
+		docker run --rm -v "$(CURDIR)/artifacts:/work" alpine:3.20 sh -lc "chown -R $$uid:$$gid /work/app /work/cache /work/logs /work/otel /work/traces /work/runtime /work/eval/full_stack /work/eval/jobs"; \
 	fi
 
 web-typecheck:
@@ -57,7 +58,7 @@ web-typecheck:
 web-build:
 	cd web && npm ci && npm run build
 
-ci: test web-typecheck native-go-test native-rust-test native-cpp-test supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-dependency-lock-contract-sample native-secret-rotation-contract-sample native-incident-workflow-sample native-ci-contract-live evaluation-index-sample
+ci: test web-typecheck native-go-test native-rust-test native-cpp-test native-admission-sample native-redaction-sample native-safety-sample native-audit-log-sample native-dedup-sample native-hll-sample native-consistent-hash-sample native-cache-sample native-cost-sample native-sampler-sample native-retry-sample supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-dependency-lock-contract-sample native-secret-rotation-contract-sample native-incident-workflow-sample native-ci-contract-live evaluation-index-sample
 	docker compose config --quiet
 	docker compose --profile tls config --quiet
 
@@ -265,6 +266,146 @@ native-cpp-cli-build:
 	mkdir -p artifacts/native
 	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_policy/include native/cpp/tryops_policy/src/tryops_policy.cpp native/cpp/tryops_policy/src/tryops_policy_cli.cpp -o artifacts/native/tryops_policy_cli
 
+native-admission-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_admission/include native/cpp/tryops_admission/src/tryops_admission.cpp native/cpp/tryops_admission/src/tryops_admission_cli.cpp -o artifacts/native/tryops_admission_cli
+
+native-admission-sample: native-admission-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_admission.py --wire samples/admission/mixed_traffic.wire --output artifacts/admission/admission_report.json --max-shed-rate 0.7
+
+native-admission-test:
+	@set -eu; \
+	tmp_adm=$$(mktemp /tmp/tryops_admission_test.XXXXXX); \
+	trap 'rm -f "$$tmp_adm"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_admission/include native/cpp/tryops_admission/src/tryops_admission.cpp native/cpp/tryops_admission/tests/test_admission.cpp -o $$tmp_adm; \
+	$$tmp_adm
+
+native-redaction-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_redaction/include native/cpp/tryops_redaction/src/tryops_redaction.cpp native/cpp/tryops_redaction/src/tryops_redaction_cli.cpp -o artifacts/native/tryops_redaction_cli
+
+native-redaction-sample: native-redaction-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_redaction.py --input samples/redaction/sensitive_log.txt --output artifacts/redaction/redaction_report.json
+
+native-redaction-test:
+	@set -eu; \
+	tmp_red=$$(mktemp /tmp/tryops_redaction_test.XXXXXX); \
+	trap 'rm -f "$$tmp_red"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_redaction/include native/cpp/tryops_redaction/src/tryops_redaction.cpp native/cpp/tryops_redaction/tests/test_redaction.cpp -o $$tmp_red; \
+	$$tmp_red
+
+native-safety-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_safety/include native/cpp/tryops_safety/src/tryops_safety.cpp native/cpp/tryops_safety/src/tryops_safety_cli.cpp -o artifacts/native/tryops_safety_cli
+
+native-safety-sample: native-safety-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_safety.py --input samples/safety/prompts.jsonl --output artifacts/safety/safety_report.json --flag 0.4 --block 0.8
+
+native-safety-test:
+	@set -eu; \
+	tmp_saf=$$(mktemp /tmp/tryops_safety_test.XXXXXX); \
+	trap 'rm -f "$$tmp_saf"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_safety/include native/cpp/tryops_safety/src/tryops_safety.cpp native/cpp/tryops_safety/tests/test_safety.cpp -o $$tmp_saf; \
+	$$tmp_saf
+
+native-audit-log-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_audit_log/include native/cpp/tryops_audit_log/src/tryops_audit_log.cpp native/cpp/tryops_audit_log/src/tryops_audit_log_cli.cpp -o artifacts/native/tryops_audit_log_cli
+
+native-audit-log-sample: native-audit-log-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_audit_log.py --input samples/audit/events.txt --output artifacts/audit/audit_log_report.json --prove 0
+
+native-audit-log-test:
+	@set -eu; \
+	tmp_aud=$$(mktemp /tmp/tryops_audit_log_test.XXXXXX); \
+	trap 'rm -f "$$tmp_aud"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_audit_log/include native/cpp/tryops_audit_log/src/tryops_audit_log.cpp native/cpp/tryops_audit_log/tests/test_audit_log.cpp -o $$tmp_aud; \
+	$$tmp_aud
+
+native-dedup-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_dedup/include native/cpp/tryops_dedup/src/tryops_dedup.cpp native/cpp/tryops_dedup/src/tryops_dedup_cli.cpp -o artifacts/native/tryops_dedup_cli
+
+native-dedup-sample: native-dedup-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_dedup.py --input samples/dedup/idempotency_keys.txt --output artifacts/dedup/dedup_report.json --expected-items 5000 --target-fp-rate 0.01 --max-fp-rate 0.05
+
+native-dedup-test:
+	@set -eu; \
+	tmp_ded=$$(mktemp /tmp/tryops_dedup_test.XXXXXX); \
+	trap 'rm -f "$$tmp_ded"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_dedup/include native/cpp/tryops_dedup/src/tryops_dedup.cpp native/cpp/tryops_dedup/tests/test_dedup.cpp -o $$tmp_ded; \
+	$$tmp_ded
+
+native-hll-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_hll/include native/cpp/tryops_hll/src/tryops_hll.cpp native/cpp/tryops_hll/src/tryops_hll_cli.cpp -o artifacts/native/tryops_hll_cli
+
+native-hll-sample: native-hll-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_hll.py --input samples/hll/event_keys.txt --output artifacts/hll/hll_report.json --precision 14 --max-rel-error 0.05
+
+native-hll-test:
+	@set -eu; \
+	tmp_hll=$$(mktemp /tmp/tryops_hll_test.XXXXXX); \
+	trap 'rm -f "$$tmp_hll"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_hll/include native/cpp/tryops_hll/src/tryops_hll.cpp native/cpp/tryops_hll/tests/test_hll.cpp -o $$tmp_hll; \
+	$$tmp_hll
+
+native-cache-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_cache/include native/cpp/tryops_cache/src/tryops_cache.cpp native/cpp/tryops_cache/src/tryops_cache_cli.cpp -o artifacts/native/tryops_cache_cli
+
+native-cache-sample: native-cache-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_cache.py --wire samples/cache/requests.wire --output artifacts/cache/cache_report.json --min-hit-rate 0.5
+
+native-cache-test:
+	@set -eu; \
+	tmp_ch=$$(mktemp /tmp/tryops_cache_test.XXXXXX); \
+	trap 'rm -f "$$tmp_ch"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_cache/include native/cpp/tryops_cache/src/tryops_cache.cpp native/cpp/tryops_cache/tests/test_cache.cpp -o $$tmp_ch; \
+	$$tmp_ch
+
+native-cost-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_cost/include native/cpp/tryops_cost/src/tryops_cost.cpp native/cpp/tryops_cost/src/tryops_cost_cli.cpp -o artifacts/native/tryops_cost_cli
+
+native-cost-sample: native-cost-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_cost.py --input samples/cost/usage.json --output artifacts/cost/cost_report.json
+
+native-cost-test:
+	@set -eu; \
+	tmp_co=$$(mktemp /tmp/tryops_cost_test.XXXXXX); \
+	trap 'rm -f "$$tmp_co"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_cost/include native/cpp/tryops_cost/src/tryops_cost.cpp native/cpp/tryops_cost/tests/test_cost.cpp -o $$tmp_co; \
+	$$tmp_co
+
+native-sampler-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_sampler/include native/cpp/tryops_sampler/src/tryops_sampler.cpp native/cpp/tryops_sampler/src/tryops_sampler_cli.cpp -o artifacts/native/tryops_sampler_cli
+
+native-sampler-sample: native-sampler-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_sampler.py --wire samples/sampler/trace_stream.wire --output artifacts/sampler/sampler_report.json
+
+native-sampler-test:
+	@set -eu; \
+	tmp_sa=$$(mktemp /tmp/tryops_sampler_test.XXXXXX); \
+	trap 'rm -f "$$tmp_sa"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_sampler/include native/cpp/tryops_sampler/src/tryops_sampler.cpp native/cpp/tryops_sampler/tests/test_sampler.cpp -o $$tmp_sa; \
+	$$tmp_sa
+
+native-retry-build:
+	mkdir -p artifacts/native
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_retry/include native/cpp/tryops_retry/src/tryops_retry.cpp native/cpp/tryops_retry/src/tryops_retry_cli.cpp -o artifacts/native/tryops_retry_cli
+
+native-retry-sample: native-retry-build
+	PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_native_retry.py --wire samples/retry/requests.wire --output artifacts/retry/retry_report.json --min-success-rate 0.85
+
+native-retry-test:
+	@set -eu; \
+	tmp_re=$$(mktemp /tmp/tryops_retry_test.XXXXXX); \
+	trap 'rm -f "$$tmp_re"' EXIT; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_retry/include native/cpp/tryops_retry/src/tryops_retry.cpp native/cpp/tryops_retry/tests/test_retry.cpp -o $$tmp_re; \
+	$$tmp_re
+
 native-image-metrics-build:
 	mkdir -p artifacts/native
 	$(CXX) $(CXXFLAGS) native/cpp/tryops_image_metrics/src/tryops_image_metrics_cli.cpp -o artifacts/native/tryops_image_metrics_cli
@@ -373,9 +514,39 @@ native-cpp-test:
 	tmp_cache=$$(mktemp /tmp/tryops_semantic_cache_test.XXXXXX); \
 	tmp_gguf=$$(mktemp /tmp/tryops_gguf_preflight_test.XXXXXX); \
 	tmp_trace=$$(mktemp /tmp/tryops_trace_envelope_test.XXXXXX); \
-	trap 'rm -f "$$tmp_policy" "$$tmp_cache" "$$tmp_gguf" "$$tmp_trace" /tmp/tryops_gguf_preflight_fixture.gguf' EXIT; \
+	tmp_adm=$$(mktemp /tmp/tryops_admission_test.XXXXXX); \
+	tmp_red=$$(mktemp /tmp/tryops_redaction_test.XXXXXX); \
+	tmp_saf=$$(mktemp /tmp/tryops_safety_test.XXXXXX); \
+	tmp_aud=$$(mktemp /tmp/tryops_audit_log_test.XXXXXX); \
+	tmp_ded=$$(mktemp /tmp/tryops_dedup_test.XXXXXX); \
+	tmp_hll=$$(mktemp /tmp/tryops_hll_test.XXXXXX); \
+	tmp_ch=$$(mktemp /tmp/tryops_cache_test.XXXXXX); \
+	tmp_co=$$(mktemp /tmp/tryops_cost_test.XXXXXX); \
+	tmp_sa=$$(mktemp /tmp/tryops_sampler_test.XXXXXX); \
+	tmp_re=$$(mktemp /tmp/tryops_retry_test.XXXXXX); \
+	trap 'rm -f "$$tmp_policy" "$$tmp_cache" "$$tmp_gguf" "$$tmp_trace" "$$tmp_adm" "$$tmp_red" "$$tmp_saf" "$$tmp_aud" "$$tmp_ded" "$$tmp_hll" "$$tmp_ch" "$$tmp_co" "$$tmp_sa" "$$tmp_re" /tmp/tryops_gguf_preflight_fixture.gguf' EXIT; \
 	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_policy/include native/cpp/tryops_policy/src/tryops_policy.cpp native/cpp/tryops_policy/tests/test_policy.cpp -o $$tmp_policy; \
 	$$tmp_policy; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_admission/include native/cpp/tryops_admission/src/tryops_admission.cpp native/cpp/tryops_admission/tests/test_admission.cpp -o $$tmp_adm; \
+	$$tmp_adm; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_redaction/include native/cpp/tryops_redaction/src/tryops_redaction.cpp native/cpp/tryops_redaction/tests/test_redaction.cpp -o $$tmp_red; \
+	$$tmp_red; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_safety/include native/cpp/tryops_safety/src/tryops_safety.cpp native/cpp/tryops_safety/tests/test_safety.cpp -o $$tmp_saf; \
+	$$tmp_saf; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_audit_log/include native/cpp/tryops_audit_log/src/tryops_audit_log.cpp native/cpp/tryops_audit_log/tests/test_audit_log.cpp -o $$tmp_aud; \
+	$$tmp_aud; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_dedup/include native/cpp/tryops_dedup/src/tryops_dedup.cpp native/cpp/tryops_dedup/tests/test_dedup.cpp -o $$tmp_ded; \
+	$$tmp_ded; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_hll/include native/cpp/tryops_hll/src/tryops_hll.cpp native/cpp/tryops_hll/tests/test_hll.cpp -o $$tmp_hll; \
+	$$tmp_hll; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_cache/include native/cpp/tryops_cache/src/tryops_cache.cpp native/cpp/tryops_cache/tests/test_cache.cpp -o $$tmp_ch; \
+	$$tmp_ch; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_cost/include native/cpp/tryops_cost/src/tryops_cost.cpp native/cpp/tryops_cost/tests/test_cost.cpp -o $$tmp_co; \
+	$$tmp_co; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_sampler/include native/cpp/tryops_sampler/src/tryops_sampler.cpp native/cpp/tryops_sampler/tests/test_sampler.cpp -o $$tmp_sa; \
+	$$tmp_sa; \
+	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_retry/include native/cpp/tryops_retry/src/tryops_retry.cpp native/cpp/tryops_retry/tests/test_retry.cpp -o $$tmp_re; \
+	$$tmp_re; \
 	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_semantic_cache/include native/cpp/tryops_semantic_cache/src/tryops_semantic_cache.cpp native/cpp/tryops_semantic_cache/tests/test_semantic_cache.cpp -o $$tmp_cache; \
 	$$tmp_cache; \
 	$(CXX) $(CXXFLAGS) -Inative/cpp/tryops_gguf_preflight/include native/cpp/tryops_gguf_preflight/src/tryops_gguf_preflight.cpp native/cpp/tryops_gguf_preflight/tests/test_gguf_preflight.cpp -o $$tmp_gguf; \
@@ -424,7 +595,7 @@ native-guardrail-smoke: native-guardrail-build
 native-go-build:
 	cd native/go/tryops-controller && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops-controller .
 
-native-go-test: native-go-toolchain
+native-go-test: native-go-toolchain native-consistent-hash-test
 	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
 		cd native/go/tryops-controller && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
@@ -568,6 +739,23 @@ native-slo-gate-test:
 
 native-slo-gate-sample: native-slo-gate-build
 	artifacts/native/tryops_slo_gate --input artifacts/eval/gateway_benchmark/native_gateway_benchmark.json --output artifacts/eval/slo/native_slo_gate_report.json
+
+native-consistent-hash-build:
+	mkdir -p artifacts/native
+	cd native/go/tryops-consistent-hash && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_consistent_hash .
+
+native-consistent-hash-test:
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
+		mkdir -p artifacts/.gocache; \
+		cd native/go/tryops-consistent-hash && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+	else \
+		echo "go not installed; skipping consistent-hash ring tests"; \
+	fi
+
+native-consistent-hash-sample: native-consistent-hash-build
+	mkdir -p artifacts/consistent_hash
+	artifacts/native/tryops_consistent_hash < samples/consistent_hash/ring_request.wire > artifacts/consistent_hash/ring_report.json
+	@python -c "import json;r=json.load(open('artifacts/consistent_hash/ring_report.json'));print('[ring] nodes=%d keys=%d imbalance=%.3f removed=%s moved_fraction=%.3f ideal=%.3f minimal_disruption=%s'%(r['nodes'],r['total_keys'],r['imbalance_ratio'],r['removed_node'],r['moved_fraction'],r['ideal_fraction'],r['minimal_disruption']))"
 
 native-event-dispatcher-build:
 	mkdir -p artifacts/native
@@ -1134,22 +1322,22 @@ app-up: evaluation-index-sample
 	uid=$$(id -u); gid=$$(id -g); \
 	TRYOPS_CONTAINER_UID=$$uid \
 	TRYOPS_CONTAINER_GID=$$gid \
-	TRYOPS_POSTGRES_PORT=15432 \
+	TRYOPS_POSTGRES_PORT=$${TRYOPS_POSTGRES_PORT:-15432} \
 	TRYOPS_POSTGRES_USER=$${TRYOPS_POSTGRES_USER:-tryops} \
 	TRYOPS_POSTGRES_DB=$${TRYOPS_POSTGRES_DB:-tryops} \
 	TRYOPS_POSTGRES_PASSWORD=$${TRYOPS_POSTGRES_PASSWORD:-tryops-local-postgres} \
-	TRYOPS_VALKEY_PORT=16379 \
+	TRYOPS_VALKEY_PORT=$${TRYOPS_VALKEY_PORT:-16379} \
 	TRYOPS_MINIO_ROOT_USER=$${TRYOPS_MINIO_ROOT_USER:-tryops} \
 	TRYOPS_MINIO_ROOT_PASSWORD=$${TRYOPS_MINIO_ROOT_PASSWORD:-tryops-local-minio} \
-	TRYOPS_MINIO_PORT=19000 \
-	TRYOPS_MINIO_CONSOLE_PORT=19001 \
-	TRYOPS_MLFLOW_PORT=15000 \
-	TRYOPS_PROMETHEUS_PORT=19090 \
-	TRYOPS_ALERTMANAGER_PORT=19093 \
-	TRYOPS_GRAFANA_PORT=13000 \
-	TRYOPS_GUARDRAIL_PORT=18093 \
-	TRYOPS_API_PORT=18080 \
-	TRYOPS_GATEWAY_PORT=18081 \
+	TRYOPS_MINIO_PORT=$${TRYOPS_MINIO_PORT:-19000} \
+	TRYOPS_MINIO_CONSOLE_PORT=$${TRYOPS_MINIO_CONSOLE_PORT:-19001} \
+	TRYOPS_MLFLOW_PORT=$${TRYOPS_MLFLOW_PORT:-15000} \
+	TRYOPS_PROMETHEUS_PORT=$${TRYOPS_PROMETHEUS_PORT:-19090} \
+	TRYOPS_ALERTMANAGER_PORT=$${TRYOPS_ALERTMANAGER_PORT:-19093} \
+	TRYOPS_GRAFANA_PORT=$${TRYOPS_GRAFANA_PORT:-13000} \
+	TRYOPS_GUARDRAIL_PORT=$${TRYOPS_GUARDRAIL_PORT:-18093} \
+	TRYOPS_API_PORT=$${TRYOPS_API_PORT:-18080} \
+	TRYOPS_GATEWAY_PORT=$${TRYOPS_GATEWAY_PORT:-18081} \
 	TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN="$${TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN:-host=postgres port=5432 user=tryops password=tryops-local-postgres dbname=tryops}" \
 		docker compose up --build -d gateway prometheus grafana minio mlflow guardrail
 
@@ -1163,32 +1351,32 @@ app-smoke: native-stack-smoke-build native-job-runner-build evaluation-index-sam
 	COMPOSE_PROJECT_NAME=$$project \
 	TRYOPS_CONTAINER_UID=$$uid \
 	TRYOPS_CONTAINER_GID=$$gid \
-	TRYOPS_POSTGRES_PORT=15432 \
+	TRYOPS_POSTGRES_PORT=$${TRYOPS_POSTGRES_PORT:-15432} \
 	TRYOPS_POSTGRES_USER=$${TRYOPS_POSTGRES_USER:-tryops} \
 	TRYOPS_POSTGRES_DB=$${TRYOPS_POSTGRES_DB:-tryops} \
 	TRYOPS_POSTGRES_PASSWORD=$${TRYOPS_POSTGRES_PASSWORD:-tryops-local-postgres} \
-	TRYOPS_VALKEY_PORT=16379 \
+	TRYOPS_VALKEY_PORT=$${TRYOPS_VALKEY_PORT:-16379} \
 	TRYOPS_MINIO_ROOT_USER=$${TRYOPS_MINIO_ROOT_USER:-tryops} \
 	TRYOPS_MINIO_ROOT_PASSWORD=$${TRYOPS_MINIO_ROOT_PASSWORD:-tryops-local-minio} \
-	TRYOPS_MINIO_PORT=19000 \
-	TRYOPS_MINIO_CONSOLE_PORT=19001 \
-	TRYOPS_MLFLOW_PORT=15000 \
-	TRYOPS_PROMETHEUS_PORT=19090 \
-	TRYOPS_ALERTMANAGER_PORT=19093 \
-	TRYOPS_GRAFANA_PORT=13000 \
-	TRYOPS_GUARDRAIL_PORT=18093 \
-	TRYOPS_API_PORT=18080 \
-	TRYOPS_GATEWAY_PORT=18081 \
+	TRYOPS_MINIO_PORT=$${TRYOPS_MINIO_PORT:-19000} \
+	TRYOPS_MINIO_CONSOLE_PORT=$${TRYOPS_MINIO_CONSOLE_PORT:-19001} \
+	TRYOPS_MLFLOW_PORT=$${TRYOPS_MLFLOW_PORT:-15000} \
+	TRYOPS_PROMETHEUS_PORT=$${TRYOPS_PROMETHEUS_PORT:-19090} \
+	TRYOPS_ALERTMANAGER_PORT=$${TRYOPS_ALERTMANAGER_PORT:-19093} \
+	TRYOPS_GRAFANA_PORT=$${TRYOPS_GRAFANA_PORT:-13000} \
+	TRYOPS_GUARDRAIL_PORT=$${TRYOPS_GUARDRAIL_PORT:-18093} \
+	TRYOPS_API_PORT=$${TRYOPS_API_PORT:-18080} \
+	TRYOPS_GATEWAY_PORT=$${TRYOPS_GATEWAY_PORT:-18081} \
 	TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN="$${TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN:-host=postgres port=5432 user=tryops password=tryops-local-postgres dbname=tryops}" \
 		docker compose up --build -d gateway prometheus grafana minio mlflow guardrail; \
-	TRYOPS_STACK_GATEWAY_URL=http://127.0.0.1:18081 \
-	TRYOPS_STACK_GUARDRAIL_URL=http://127.0.0.1:18093 \
-	TRYOPS_STACK_PROMETHEUS_URL=http://127.0.0.1:19090 \
-	TRYOPS_STACK_GRAFANA_URL=http://127.0.0.1:13000 \
-	TRYOPS_STACK_MINIO_URL=http://127.0.0.1:19000 \
-	TRYOPS_STACK_MLFLOW_URL=http://127.0.0.1:15000 \
+	TRYOPS_STACK_GATEWAY_URL=http://127.0.0.1:$${TRYOPS_GATEWAY_PORT:-18081} \
+	TRYOPS_STACK_GUARDRAIL_URL=http://127.0.0.1:$${TRYOPS_GUARDRAIL_PORT:-18093} \
+	TRYOPS_STACK_PROMETHEUS_URL=http://127.0.0.1:$${TRYOPS_PROMETHEUS_PORT:-19090} \
+	TRYOPS_STACK_GRAFANA_URL=http://127.0.0.1:$${TRYOPS_GRAFANA_PORT:-13000} \
+	TRYOPS_STACK_MINIO_URL=http://127.0.0.1:$${TRYOPS_MINIO_PORT:-19000} \
+	TRYOPS_STACK_MLFLOW_URL=http://127.0.0.1:$${TRYOPS_MLFLOW_PORT:-15000} \
 		artifacts/native/tryops_stack_smoke --output artifacts/eval/full_stack/full_stack_smoke.json; \
-	TRYOPS_JOB_RUNNER_BASE_URL=http://127.0.0.1:18081 \
+	TRYOPS_JOB_RUNNER_BASE_URL=http://127.0.0.1:$${TRYOPS_GATEWAY_PORT:-18081} \
 		artifacts/native/tryops_job_runner --output artifacts/eval/jobs/native_job_runner_report.json; \
 	artifacts/native/tryops_evaluation_index --root . --output artifacts/eval/evaluation_index/evaluation_index.json
 
@@ -1198,7 +1386,7 @@ app-down:
 roadmap-status:
 	PYTHONPATH=$(PYTHONPATH) python scripts/roadmap_status.py MLOPS_VTON_LLM_ENTERPRISE_ROADMAP.md
 
-smoke: native-policy-sample native-vton-preprocess-sample native-image-metrics-sample native-perf-stats-sample native-burn-rate-build energy-demo-sample quota-sample native-quota-read-model-sample native-runtime-telemetry-sample native-observability-contract-sample native-alertmanager-contract-sample native-dependency-lock-contract-sample native-secret-rotation-contract-sample native-db-migrator-sample native-backup-restore-sample native-tls-contract-sample native-quota-ledger-smoke native-distributed-quota-smoke native-rust-test native-rust-smoke native-edge-cache-smoke native-edge-guardrail-smoke auth-sample supply-chain-sample model-supply-chain-sample finops-sample orchestration-sample vton-preprocess-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample native-trace-envelope-sample native-container-contract-sample test validate-sample deploy-package-sample signed-pr-promotion-sample registry-webhook-sample chaos-sample vton-compare-sample vton-advanced-eval-sample llm-benchmark-sample guardrail-sample native-guardrail-test native-go-test native-config-contract-test native-db-migrator-test native-backup-restore-test native-tls-contract-test native-dependency-lock-contract-test native-performance-budget-test native-benchmark-test native-vllm-probe-test native-quantized-preflight-test native-job-runner-test native-slo-gate-test native-event-dispatcher-test native-demo-acceptance-test alert-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample slo-burn-rate-sample llm-sensitivity-sample llm-continuous-batching-sample native-eval-stats-build eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample governance-sample native-cpp-test native-gguf-preflight-test professor-demo-acceptance
+smoke: native-policy-sample native-admission-sample native-redaction-sample native-safety-sample native-audit-log-sample native-dedup-sample native-hll-sample native-consistent-hash-sample native-cache-sample native-cost-sample native-sampler-sample native-retry-sample native-vton-preprocess-sample native-image-metrics-sample native-perf-stats-sample native-burn-rate-build energy-demo-sample quota-sample native-quota-read-model-sample native-runtime-telemetry-sample native-observability-contract-sample native-alertmanager-contract-sample native-dependency-lock-contract-sample native-secret-rotation-contract-sample native-db-migrator-sample native-backup-restore-sample native-tls-contract-sample native-quota-ledger-smoke native-distributed-quota-smoke native-rust-test native-rust-smoke native-edge-cache-smoke native-edge-guardrail-smoke auth-sample supply-chain-sample model-supply-chain-sample finops-sample orchestration-sample vton-preprocess-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample native-trace-envelope-sample native-container-contract-sample test validate-sample deploy-package-sample signed-pr-promotion-sample registry-webhook-sample chaos-sample vton-compare-sample vton-advanced-eval-sample llm-benchmark-sample guardrail-sample native-guardrail-test native-go-test native-config-contract-test native-db-migrator-test native-backup-restore-test native-tls-contract-test native-dependency-lock-contract-test native-performance-budget-test native-benchmark-test native-vllm-probe-test native-quantized-preflight-test native-job-runner-test native-slo-gate-test native-event-dispatcher-test native-demo-acceptance-test alert-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample slo-burn-rate-sample llm-sensitivity-sample llm-continuous-batching-sample native-eval-stats-build eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample governance-sample native-cpp-test native-gguf-preflight-test professor-demo-acceptance
 
 vton-real-sample: native-vton-preprocess-build native-image-metrics-build
 	PYTHONPATH=$(PYTHONPATH) python scripts/create_synthetic_vton_demo.py --output-dir artifacts/demo/vton

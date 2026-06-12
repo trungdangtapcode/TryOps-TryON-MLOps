@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import { ImagePlus, Play } from "lucide-react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { ImagePlus, Loader2, Play, UploadCloud } from "lucide-react";
 import type { TryOpsClient } from "../api";
 import { quotaPlans, vtonAliases } from "../data";
 import { compactJson, formatNumber, formatOptionalMs } from "../format";
@@ -19,6 +19,10 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
   const [quotaPlan, setQuotaPlan] = useState("free");
   const [personPreview, setPersonPreview] = useState<string | undefined>();
   const [garmentPreview, setGarmentPreview] = useState<string | undefined>();
+  const [personUploadBusy, setPersonUploadBusy] = useState(false);
+  const [garmentUploadBusy, setGarmentUploadBusy] = useState(false);
+  const [personUploadError, setPersonUploadError] = useState<string | undefined>();
+  const [garmentUploadError, setGarmentUploadError] = useState<string | undefined>();
   const [result, setResult] = useState<VtonResponse | undefined>();
   const [comparison, setComparison] = useState<VtonComparisonReport | undefined>();
   const [comparisonError, setComparisonError] = useState<string | undefined>();
@@ -26,6 +30,7 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
 
   const reportEntries = useMemo(() => Object.entries(result?.report ?? {}).slice(0, 6), [result]);
   const comparisonRuns = useMemo(() => comparison?.runs.slice(0, 2) ?? [], [comparison]);
+  const uploadBusy = personUploadBusy || garmentUploadBusy;
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +70,44 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
     }
   }
 
+  async function uploadAsset(role: VtonUploadRole, file: File) {
+    const setUploadBusy = role === "person" ? setPersonUploadBusy : setGarmentUploadBusy;
+    const setUploadError = role === "person" ? setPersonUploadError : setGarmentUploadError;
+    const setPath = role === "person" ? setPersonPath : setGarmentPath;
+    const setPreview = role === "person" ? setPersonPreview : setGarmentPreview;
+
+    setUploadError(undefined);
+    if (!client.hasApiKey()) {
+      setUploadError("Enter tryops-viewer-demo-key in the API key field before uploading.");
+      return;
+    }
+    if (!isSupportedImageFile(file)) {
+      setUploadError("Upload a PNG, JPEG, or WebP image.");
+      return;
+    }
+
+    setUploadBusy(true);
+    setResult(undefined);
+    try {
+      const dataUrl = await imageFileToPngDataUrl(file);
+      const response = await client.uploadVtonImage({
+        role,
+        filename: file.name || `${role}.png`,
+        data_url: dataUrl
+      });
+      if (!response.data?.path || response.status === "rejected") {
+        throw new Error(uploadErrorMessage(response.error?.code, response.error?.message));
+      }
+      setPath(response.data.path);
+      setPreview(dataUrl);
+      onMutate();
+    } catch (error: unknown) {
+      setUploadError(error instanceof Error ? error.message : "Image upload failed");
+    } finally {
+      setUploadBusy(false);
+    }
+  }
+
   return (
     <section className="workbench-grid">
       <form
@@ -79,7 +122,7 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
             <p className="eyebrow">VTON request</p>
             <h2>Studio</h2>
           </div>
-          <button className="primary-button" disabled={busy} type="submit">
+          <button className="primary-button" disabled={busy || uploadBusy} type="submit">
             <Play aria-hidden="true" size={17} />
             {busy ? "Running" : "Run"}
           </button>
@@ -88,16 +131,18 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
           <AssetInput
             label="Person"
             path={personPath}
-            preview={personPreview}
-            onPathChange={setPersonPath}
-            onPreviewChange={setPersonPreview}
+            preview={personPreview ?? client.artifactUrl(personPath)}
+            uploading={personUploadBusy}
+            error={personUploadError}
+            onFileUpload={(file) => uploadAsset("person", file)}
           />
           <AssetInput
             label="Garment"
             path={garmentPath}
-            preview={garmentPreview}
-            onPathChange={setGarmentPath}
-            onPreviewChange={setGarmentPreview}
+            preview={garmentPreview ?? client.artifactUrl(garmentPath)}
+            uploading={garmentUploadBusy}
+            error={garmentUploadError}
+            onFileUpload={(file) => uploadAsset("garment", file)}
           />
         </div>
         <div className="form-grid">
@@ -202,6 +247,52 @@ export function VtonStudio({ client, onMutate }: VtonStudioProps) {
   );
 }
 
+type VtonUploadRole = "person" | "garment";
+
+const SUPPORTED_IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const SUPPORTED_IMAGE_EXTENSIONS = /\.(png|jpe?g|webp)$/i;
+
+function isSupportedImageFile(file: File): boolean {
+  return SUPPORTED_IMAGE_MIME_TYPES.has(file.type) || SUPPORTED_IMAGE_EXTENSIONS.test(file.name);
+}
+
+async function imageFileToPngDataUrl(file: File): Promise<string> {
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const image = await loadImage(objectUrl);
+    if (image.naturalWidth < 1 || image.naturalHeight < 1) {
+      throw new Error("Image has no readable pixels");
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error("Browser image conversion is unavailable");
+    }
+    context.drawImage(image, 0, 0);
+    return canvas.toDataURL("image/png");
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Browser could not read this image"));
+    image.src = src;
+  });
+}
+
+function uploadErrorMessage(code?: string, message?: string): string {
+  if (code === "unauthorized_admin_action") {
+    return "Enter a key with admin:read scope. For local demo use tryops-viewer-demo-key.";
+  }
+  return message ?? "Image upload was rejected";
+}
+
 interface ComparisonImageProps {
   label: string;
   metric: string;
@@ -272,32 +363,70 @@ interface AssetInputProps {
   label: string;
   path: string;
   preview?: string;
-  onPathChange: (value: string) => void;
-  onPreviewChange: (value?: string) => void;
+  uploading: boolean;
+  error?: string;
+  onFileUpload: (file: File) => Promise<void>;
 }
 
-function AssetInput({ label, path, preview, onPathChange, onPreviewChange }: AssetInputProps) {
+function AssetInput({ label, path, preview, uploading, error, onFileUpload }: AssetInputProps) {
+  const [dragActive, setDragActive] = useState(false);
+
+  function uploadFirstFile(files: FileList | null) {
+    const file = files?.[0];
+    if (file) {
+      void onFileUpload(file);
+    }
+  }
+
+  function handleDragOver(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setDragActive(true);
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragActive(false);
+    uploadFirstFile(event.dataTransfer.files);
+  }
+
   return (
-    <div className="asset-input">
-      <div className="asset-preview">
+    <div className={`asset-input${dragActive ? " drag-active" : ""}`}>
+      <div
+        aria-label={`${label} image upload`}
+        className="asset-preview"
+        onDragLeave={() => setDragActive(false)}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+        role="button"
+        tabIndex={0}
+      >
         {preview ? <img alt={`${label} preview`} src={preview} /> : <ImagePlus aria-hidden="true" size={34} />}
+        {uploading ? (
+          <div className="upload-overlay">
+            <Loader2 aria-hidden="true" className="spin" size={18} />
+            Uploading
+          </div>
+        ) : null}
       </div>
-      <label className="field stacked">
-        <span>{label} path</span>
-        <input onChange={(event) => onPathChange(event.target.value)} value={path} />
-      </label>
-      <label className="file-button">
-        <ImagePlus aria-hidden="true" size={16} />
-        Preview
+      <div className="asset-current">
+        <span>Saved asset</span>
+        <strong title={path}>{path}</strong>
+      </div>
+      <label className={`file-button${uploading ? " disabled" : ""}`}>
+        <UploadCloud aria-hidden="true" size={16} />
+        {uploading ? "Uploading" : "Upload image"}
         <input
-          accept="image/png,image/jpeg"
+          accept="image/png,image/jpeg,image/webp"
+          disabled={uploading}
           onChange={(event) => {
-            const file = event.target.files?.[0];
-            onPreviewChange(file ? URL.createObjectURL(file) : undefined);
+            uploadFirstFile(event.target.files);
+            event.currentTarget.value = "";
           }}
           type="file"
         />
       </label>
+      {error ? <div className="asset-error">{error}</div> : null}
     </div>
   );
 }
