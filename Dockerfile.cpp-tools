@@ -14,7 +14,10 @@ FROM debian:bookworm-slim
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates libstdc++6 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system tryops \
+    && useradd --system --gid tryops --home-dir /nonexistent --no-create-home --shell /usr/sbin/nologin tryops
 COPY --from=build /out/tryops_* /usr/local/bin/
+USER tryops
 ENTRYPOINT ["/bin/sh", "-lc"]
 CMD ["ls -1 /usr/local/bin/tryops_*"]

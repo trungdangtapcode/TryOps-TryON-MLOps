@@ -1605,9 +1605,8 @@ Date: 2026-06-11
   generates Syft SPDX SBOMs, gates HIGH/CRITICAL Trivy findings, and signs pushed images with
   Cosign keyless OIDC on non-PR runs. The native Go contract passed 16/16 checks and is surfaced as
   `ci_contract` in the evaluation index.
-- Notes: this partially completes PA062. Local `production_ready=false` because `syft`, `trivy`, and
-  `cosign` are not installed in this workspace; the GitHub workflow is ready to execute those tools
-  in CI.
+- Notes: this partially completed PA062 at the CI-contract layer. It is superseded by EXP-093, which
+  adds local live Syft/Trivy/Cosign execution and production-ready native CI evidence.
 
 ## EXP-088: Native Secret Rotation And Workload Identity Contract
 
@@ -1650,8 +1649,8 @@ Date: 2026-06-11
   - `artifacts/eval/evaluation_index/evaluation_index.json`
 - Outcome: `uv.lock` pins the Python project resolution, including `accelerate=1.14.0`,
   `bitsandbytes=0.49.2`, `torch=2.11.0`, `transformers=5.11.0`, and `vllm=0.22.1`. The split Go
-  verifier checks Python, Console, Rust gateway, and native Go module locks and passed 87/87 checks
-  with 326 Python packages, 59 Node packages, 228 Rust crates, and 30 Go modules. The evaluation
+  verifier checks Python, Console, Rust gateway, and native Go module locks and now passes 89/89
+  checks with 326 Python packages, 59 Node packages, 228 Rust crates, and 32 Go modules. The evaluation
   index highlights the report as `dependency_lock`.
 - Notes: this closes PA063 for local/native reproducibility evidence. The older generated
   `requirements.lock` remains as a supply-chain fallback artifact, while `uv.lock` is the canonical
@@ -1684,10 +1683,10 @@ Date: 2026-06-11
   exit.
 - Notes: this closes PA072-PA086 for local/native P8 evidence. The final smoke passed 18/18
   full-stack checks and then passed both native job-runner jobs through the Rust gateway. Live
-  Syft/Trivy/Cosign execution, external k6/locust confirmation, external error-tracker DSN exercise,
-  and live OTLP exporters remain production-profile work rather than local P8 gaps; distributed
-  quota validation is closed separately in EXP-091 and live Vault KV rotation is closed separately
-  in EXP-092.
+  External k6/locust confirmation, external error-tracker DSN exercise, and live OTLP exporters
+  remain production-profile work rather than local P8 gaps; distributed quota validation is closed
+  separately in EXP-091, live Vault KV rotation is closed separately in EXP-092, and live
+  Syft/Trivy/Cosign execution is closed separately in EXP-093.
 
 ## EXP-091: Distributed Native Quota Admission
 
@@ -1709,8 +1708,8 @@ Date: 2026-06-11
   started disposable Postgres plus two Rust gateway processes and passed with exactly 20/32 allowed,
   12 rejected, zero request errors, and `no_cluster_quota_oversell=true`.
 - Notes: this closes the local distributed multi-gateway quota validation gap for P6/P8. Production
-  still needs live Syft/Trivy/Cosign, external k6/locust, external error-tracker DSN, production
-  Kubernetes External Secrets sync, and live OTLP exporter exercises.
+  still needs external k6/locust, external error-tracker DSN, production Kubernetes External Secrets
+  sync, and live OTLP exporter exercises. Live Syft/Trivy/Cosign execution is closed in EXP-093.
 
 ## EXP-092: Live Native Vault KV Rotation
 
@@ -1731,3 +1730,32 @@ Date: 2026-06-11
   8 rotated secret properties, token-file auth, Vault 1.19.5 health, and version range 1..2.
 - Notes: this closes the local live Vault secret fetch/rotation gap. A production Kubernetes cluster
   should still exercise the External Secrets controller and Kubernetes auth TokenReview flow.
+
+## EXP-093: Live Syft/Trivy/Cosign Supply-Chain Gate
+
+- Command: `make native-live-supply-chain-test`; `make native-live-supply-chain-sample`;
+  `make native-ci-contract-test`; `make native-ci-contract-live`; `make native-evaluation-index-test`
+- Workload: PA062 local live SBOM, vulnerability/misconfiguration/secret scan, SBOM blob signing,
+  and native CI production-readiness contract
+- Evidence files:
+  - `.github/workflows/ci.yml`
+  - `Makefile`
+  - `native/go/tryops-live-supply-chain/`
+  - `native/go/tryops-ci-contract/`
+  - `native/go/tryops-evaluation-index/`
+  - `artifacts/eval/ci/syft/filesystem.spdx.json`
+  - `artifacts/eval/ci/trivy/filesystem.json`
+  - `artifacts/eval/ci/cosign/sbom.spdx.json.sig`
+  - `artifacts/eval/ci/cosign/tryops-local.pub`
+  - `artifacts/eval/ci/cosign/verify-blob.txt`
+  - `artifacts/eval/ci/live_supply_chain_report.json`
+  - `artifacts/eval/ci/native_ci_contract.json`
+- Outcome: `make native-live-supply-chain-sample` executes pinned open-source container images
+  `anchore/syft:v1.45.1`, `aquasec/trivy:0.71.0`, and
+  `ghcr.io/sigstore/cosign/cosign:v2.4.1`, so host PATH installs are not required. The latest live
+  report passed with 613 Syft packages, 0 HIGH/CRITICAL Trivy vulnerability/misconfiguration/secret
+  findings, and a Cosign-verified signature over the SPDX SBOM blob. `make native-ci-contract-live`
+  then passed 17/17 CI checks with `production_ready=true` and `missing_tools=[]`.
+- Notes: this closes the local live Syft/Trivy/Cosign execution gap for PA062/J010. The older
+  host-installed-tool vulnerability runner remains partial by design and records optional missing
+  Grype, pip-audit, gitleaks, and osv-scanner coverage.

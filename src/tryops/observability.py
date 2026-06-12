@@ -246,18 +246,24 @@ def emit_structured_log(event: dict[str, Any], *, response: dict[str, Any] | Non
     record["native_envelope"] = build_native_trace_log_envelope(event, structured_log=record)
     _STRUCTURED_LOGS.append(record)
     if _LOG_PATH is not None:
-        _LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with _LOG_PATH.open("a", encoding="utf-8") as log_file:
-            log_file.write(json.dumps(record, sort_keys=True) + "\n")
+        _append_jsonl(_LOG_PATH, record)
     return record
 
 
 def emit_trace_span(span: dict[str, Any]) -> dict[str, Any]:
     if _TRACE_SPAN_PATH is not None:
-        _TRACE_SPAN_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with _TRACE_SPAN_PATH.open("a", encoding="utf-8") as trace_file:
-            trace_file.write(json.dumps(span, sort_keys=True) + "\n")
+        _append_jsonl(_TRACE_SPAN_PATH, span)
     return span
+
+
+def _append_jsonl(path: Path, record: dict[str, Any]) -> bool:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("a", encoding="utf-8") as output_file:
+            output_file.write(json.dumps(record, sort_keys=True) + "\n")
+        return True
+    except OSError:
+        return False
 
 
 def structured_logs_snapshot() -> list[dict[str, Any]]:

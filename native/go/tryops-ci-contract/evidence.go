@@ -34,6 +34,7 @@ func inspectEvidence(root string, cfg Config) ([]EvidenceRef, []Check) {
 	}
 	addJSON("vulnerability_scan", cfg.VulnerabilityPath, "tryops.vulnerability_scan.v1", true)
 	addJSON("supply_chain", cfg.SupplyChainPath, "tryops.supply_chain_report.v1", true)
+	addJSON("live_supply_chain", cfg.LiveSupplyChainPath, "tryops.live_supply_chain.v1", false)
 	addJSON("container_contract", cfg.ContainerReportPath, "tryops.native_container_contract.v1", true)
 	return evidence, checks
 }
@@ -43,7 +44,10 @@ func evidenceProductionReady(root string, cfg Config) bool {
 	if err != nil {
 		return false
 	}
-	if prod, ok := boolField(vuln, "production_ready"); ok && !prod {
+	if passed, ok := boolField(vuln, "passed"); !ok || !passed {
+		return false
+	}
+	if !liveSupplyChainReady(root, cfg) {
 		return false
 	}
 	supply, err := readJSON(root, cfg.SupplyChainPath)
@@ -58,6 +62,23 @@ func evidenceProductionReady(root string, cfg Config) bool {
 		return false
 	}
 	if passed, ok := boolField(container, "passed"); !ok || !passed {
+		return false
+	}
+	return true
+}
+
+func liveSupplyChainReady(root string, cfg Config) bool {
+	live, err := readJSON(root, cfg.LiveSupplyChainPath)
+	if err != nil {
+		return false
+	}
+	if schema := stringField(live, "schema_version"); schema != "tryops.live_supply_chain.v1" {
+		return false
+	}
+	if passed, ok := boolField(live, "passed"); !ok || !passed {
+		return false
+	}
+	if prod, ok := boolField(live, "production_ready"); !ok || !prod {
 		return false
 	}
 	return true

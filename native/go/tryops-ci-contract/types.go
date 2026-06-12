@@ -6,6 +6,7 @@ type Config struct {
 	MakefilePath        string
 	VulnerabilityPath   string
 	SupplyChainPath     string
+	LiveSupplyChainPath string
 	ContainerReportPath string
 	OutputPath          string
 }

@@ -145,6 +145,36 @@ class ObservabilityTests(unittest.TestCase):
         self.assertNotIn("customer-456", str(file_records[0]))
         self.assertNotIn("customer-456", str(file_spans[0]))
 
+    def test_unwritable_observability_files_do_not_break_request_metrics(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            log_path = Path(temp_dir) / "api_events_dir"
+            span_path = Path(temp_dir) / "api_spans_dir"
+            log_path.mkdir()
+            span_path.mkdir()
+            configure_structured_log_path(log_path)
+            configure_trace_span_path(span_path)
+            try:
+                event = record_api_observation(
+                    endpoint="/v1/llm/generate",
+                    request_id="req-unwritable",
+                    workload="llm",
+                    model_alias="baseline",
+                    status="completed",
+                    started_at=start_timer(),
+                    payload={"prompt": "Explain TryOps.", "model_alias": "baseline", "user_id": "customer-789"},
+                    response={"status": "completed"},
+                )
+                memory_records = structured_logs_snapshot()
+                memory_spans = trace_spans_snapshot()
+            finally:
+                configure_structured_log_path(None)
+                configure_trace_span_path(None)
+
+        self.assertEqual(event["request_id"], "req-unwritable")
+        self.assertEqual(len(memory_records), 1)
+        self.assertEqual(len(memory_spans), 1)
+        self.assertEqual(metrics_snapshot()["request_counters"][0]["count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

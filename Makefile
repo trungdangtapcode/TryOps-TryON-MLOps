@@ -4,6 +4,9 @@ PYTHONPATH := src
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -pedantic
 CARGO ?= $(shell if command -v cargo >/dev/null 2>&1; then command -v cargo; elif [ -x "$$HOME/.cargo/bin/cargo" ]; then echo "$$HOME/.cargo/bin/cargo"; else echo cargo; fi)
+GO_VERSION ?= go1.25.5
+GO_WRAPPER ?= $(CURDIR)/artifacts/tools/go-toolchain-bin/$(GO_VERSION)
+GO ?= $(shell if [ -x "$(GO_WRAPPER)" ]; then echo "$(GO_WRAPPER)"; elif command -v go >/dev/null 2>&1; then command -v go; else echo go; fi)
 DVC ?= artifacts/tools/dvc-venv/bin/dvc
 GGUF_MODEL ?= artifacts/models/gguf/SmolLM2-135M-Instruct-Q2_K.gguf
 GGUF_MODEL_URL ?= https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/resolve/main/SmolLM2-135M-Instruct-Q2_K.gguf
@@ -13,6 +16,9 @@ VLLM_MODEL ?= HuggingFaceTB/SmolLM2-135M-Instruct
 TRYOPS_VAULT_IMAGE ?= hashicorp/vault:1.19
 TRYOPS_VAULT_PORT ?= 18200
 TRYOPS_VAULT_DEV_TOKEN ?= tryops-dev-root-token
+TRYOPS_SYFT_IMAGE ?= anchore/syft:v1.45.1
+TRYOPS_TRIVY_IMAGE ?= aquasec/trivy:0.71.0
+TRYOPS_COSIGN_IMAGE ?= ghcr.io/sigstore/cosign/cosign:v2.4.1
 
 .PHONY: native-gguf-preflight-build native-gguf-preflight-test llm-gguf-preflight-sample
 .PHONY: native-trace-envelope-cpp-build native-trace-envelope-cpp-test native-trace-envelope-build native-trace-envelope-test native-trace-envelope-sample
@@ -28,7 +34,22 @@ TRYOPS_VAULT_DEV_TOKEN ?= tryops-dev-root-token
 .PHONY: native-db-migrator-build native-db-migrator-test native-db-migrator-sample native-db-migrator-apply
 .PHONY: native-backup-restore-build native-backup-restore-test native-backup-restore-sample native-backup-restore-live
 .PHONY: native-tls-cert-sample native-tls-contract-build native-tls-contract-test native-tls-contract-sample native-tls-smoke
-.PHONY: ci native-ci-contract-build native-ci-contract-test native-ci-contract-sample
+.PHONY: ci native-go-toolchain prepare-container-artifacts native-live-supply-chain-build native-live-supply-chain-test native-live-supply-chain-sample native-ci-contract-build native-ci-contract-test native-ci-contract-sample native-ci-contract-live
+
+native-go-toolchain:
+	@if [ ! -x "$(GO_WRAPPER)" ]; then \
+		mkdir -p "$(CURDIR)/artifacts/tools/go-toolchain-bin"; \
+		GOBIN="$(CURDIR)/artifacts/tools/go-toolchain-bin" go install "golang.org/dl/$(GO_VERSION)@latest"; \
+	fi
+	@$(GO_WRAPPER) version >/dev/null 2>&1 || $(GO_WRAPPER) download
+
+prepare-container-artifacts:
+	@set -eu; \
+	uid=$$(id -u); gid=$$(id -g); \
+	mkdir -p artifacts/app artifacts/cache artifacts/logs artifacts/traces artifacts/runtime artifacts/runtime/vton artifacts/eval/full_stack artifacts/eval/jobs; \
+	if ! chown -R "$$uid:$$gid" artifacts/app artifacts/cache artifacts/logs artifacts/traces artifacts/runtime artifacts/eval/full_stack artifacts/eval/jobs 2>/dev/null; then \
+		docker run --rm -v "$(CURDIR)/artifacts:/work" alpine:3.20 sh -lc "chown -R $$uid:$$gid /work/app /work/cache /work/logs /work/traces /work/runtime /work/eval/full_stack /work/eval/jobs"; \
+	fi
 
 web-typecheck:
 	cd web && npm ci && npm run typecheck
@@ -36,7 +57,7 @@ web-typecheck:
 web-build:
 	cd web && npm ci && npm run build
 
-ci: test web-typecheck native-go-test native-rust-test native-cpp-test supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-dependency-lock-contract-sample native-secret-rotation-contract-sample native-incident-workflow-sample native-ci-contract-sample evaluation-index-sample
+ci: test web-typecheck native-go-test native-rust-test native-cpp-test supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-dependency-lock-contract-sample native-secret-rotation-contract-sample native-incident-workflow-sample native-ci-contract-live evaluation-index-sample
 	docker compose config --quiet
 	docker compose --profile tls config --quiet
 
@@ -375,17 +396,17 @@ native-trace-envelope-cpp-test:
 
 native-guardrail-build:
 	mkdir -p artifacts/native
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-guardrail && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_guardrail_cli .; \
+		cd native/go/tryops-guardrail && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_guardrail_cli .; \
 	else \
 		echo "go not installed; guardrail sample will use the Python deterministic fallback"; \
 	fi
 
 native-guardrail-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-guardrail && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-guardrail && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native guardrail tests"; \
 	fi
@@ -401,29 +422,30 @@ native-guardrail-smoke: native-guardrail-build
 	echo "metrics:"; curl -fsS http://127.0.0.1:18083/metrics | head -n 8
 
 native-go-build:
-	cd native/go/tryops-controller && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops-controller .
+	cd native/go/tryops-controller && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops-controller .
 
-native-go-test:
-	@if command -v go >/dev/null 2>&1; then \
+native-go-test: native-go-toolchain
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-controller && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-config-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-db-migrator && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-backup-restore && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-tls-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-container-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-distributed-quota && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-quota-read-model && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-runtime-telemetry && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-observability-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-alertmanager-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-incident-workflow && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-secret-rotation-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-dependency-lock-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-performance-budget && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-fullstack-load && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-ci-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
-		cd $(CURDIR)/native/go/tryops-trace-envelope && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-controller && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-config-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-db-migrator && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-backup-restore && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-tls-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-container-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-distributed-quota && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-quota-read-model && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-runtime-telemetry && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-observability-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-alertmanager-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-incident-workflow && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-secret-rotation-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-dependency-lock-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-performance-budget && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-fullstack-load && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-ci-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-live-supply-chain && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+		cd $(CURDIR)/native/go/tryops-trace-envelope && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native controller tests"; \
 	fi
@@ -442,36 +464,36 @@ native-go-smoke: native-go-build
 
 native-data-versioning-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-data-versioning && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_data_versioning .
+	cd native/go/tryops-data-versioning && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_data_versioning .
 
 native-data-versioning-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-data-versioning && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-data-versioning && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native data versioning tests"; \
 	fi
 
 native-benchmark-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-benchmark && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_benchmark .
+	cd native/go/tryops-benchmark && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_benchmark .
 
 native-benchmark-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-benchmark && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-benchmark && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native benchmark tests"; \
 	fi
 
 native-fullstack-load-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-fullstack-load && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_fullstack_load .
+	cd native/go/tryops-fullstack-load && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_fullstack_load .
 
 native-fullstack-load-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-fullstack-load && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-fullstack-load && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native full-stack load tests"; \
 	fi
@@ -481,48 +503,48 @@ native-fullstack-load-sample: native-rust-build native-fullstack-load-build
 
 native-vllm-probe-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-vllm-probe && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_vllm_probe .
+	cd native/go/tryops-vllm-probe && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_vllm_probe .
 
 native-vllm-probe-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-vllm-probe && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-vllm-probe && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native vLLM probe tests"; \
 	fi
 
 native-quantized-preflight-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-quantized-preflight && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_quantized_preflight .
+	cd native/go/tryops-quantized-preflight && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_quantized_preflight .
 
 native-quantized-preflight-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-quantized-preflight && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-quantized-preflight && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native quantized preflight tests"; \
 	fi
 
 native-stack-smoke-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-stack-smoke && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_stack_smoke .
+	cd native/go/tryops-stack-smoke && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_stack_smoke .
 
 native-stack-smoke-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-stack-smoke && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-stack-smoke && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native stack smoke tests"; \
 	fi
 
 native-job-runner-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-job-runner && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_job_runner .
+	cd native/go/tryops-job-runner && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_job_runner .
 
 native-job-runner-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-job-runner && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-job-runner && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native job runner tests"; \
 	fi
@@ -534,12 +556,12 @@ native-job-runner-sample: native-job-runner-build
 
 native-slo-gate-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-slo-gate && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_slo_gate .
+	cd native/go/tryops-slo-gate && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_slo_gate .
 
 native-slo-gate-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-slo-gate && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-slo-gate && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native SLO gate tests"; \
 	fi
@@ -549,12 +571,12 @@ native-slo-gate-sample: native-slo-gate-build
 
 native-event-dispatcher-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-event-dispatcher && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_event_dispatcher .
+	cd native/go/tryops-event-dispatcher && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_event_dispatcher .
 
 native-event-dispatcher-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-event-dispatcher && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-event-dispatcher && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native event dispatcher tests"; \
 	fi
@@ -564,24 +586,24 @@ native-event-dispatcher-sample: native-event-dispatcher-build
 
 native-demo-acceptance-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-demo-acceptance && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_demo_acceptance .
+	cd native/go/tryops-demo-acceptance && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_demo_acceptance .
 
 native-demo-acceptance-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-demo-acceptance && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-demo-acceptance && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native demo acceptance tests"; \
 	fi
 
 native-demo-recorder-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-demo-recorder && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_demo_recorder .
+	cd native/go/tryops-demo-recorder && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_demo_recorder .
 
 native-demo-recorder-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-demo-recorder && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-demo-recorder && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native demo recorder tests"; \
 	fi
@@ -597,24 +619,24 @@ professor-demo-video: native-demo-recorder-build
 
 native-vuln-scan-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-vuln-scan && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_vuln_scan .
+	cd native/go/tryops-vuln-scan && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_vuln_scan .
 
 native-vuln-scan-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-vuln-scan && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-vuln-scan && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native vulnerability scan tests"; \
 	fi
 
 native-config-contract-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-config-contract && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_config_contract .
+	cd native/go/tryops-config-contract && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_config_contract .
 
 native-config-contract-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-config-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-config-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native config contract tests"; \
 	fi
@@ -622,14 +644,43 @@ native-config-contract-test:
 native-config-contract-sample: native-config-contract-build
 	artifacts/native/tryops_config_contract --root . --output artifacts/eval/config/native_config_contract_report.json
 
+native-live-supply-chain-build: native-go-toolchain
+	mkdir -p artifacts/native
+	cd native/go/tryops-live-supply-chain && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_live_supply_chain .
+
+native-live-supply-chain-test: native-go-toolchain
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
+		mkdir -p artifacts/.gocache; \
+		cd native/go/tryops-live-supply-chain && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
+	else \
+		echo "go not installed; skipping native live supply-chain tests"; \
+	fi
+
+native-live-supply-chain-sample: native-live-supply-chain-build
+	@set -eu; \
+	mkdir -p artifacts/eval/ci/syft artifacts/eval/ci/trivy artifacts/eval/ci/cosign artifacts/.trivycache artifacts/tmp/cosign-live; \
+	rm -f artifacts/eval/ci/syft/filesystem.spdx.json artifacts/eval/ci/trivy/filesystem.json artifacts/eval/ci/cosign/sbom.spdx.json.sig artifacts/eval/ci/cosign/tryops-local.pub artifacts/eval/ci/cosign/verify-blob.txt artifacts/eval/ci/cosign/sign-blob.txt artifacts/eval/ci/cosign/generate-key.txt; \
+	docker run --rm -v "$(CURDIR)":/work -w /work "$(TRYOPS_SYFT_IMAGE)" version > artifacts/eval/ci/syft/version.txt; \
+	docker run --rm -v "$(CURDIR)":/work -w /work "$(TRYOPS_SYFT_IMAGE)" dir:/work --exclude './artifacts/**' --exclude './.git/**' --exclude './.venv/**' -o spdx-json=/work/artifacts/eval/ci/syft/filesystem.spdx.json; \
+	docker run --rm -v "$(CURDIR)":/work -w /work -v "$(CURDIR)/artifacts/.trivycache":/root/.cache "$(TRYOPS_TRIVY_IMAGE)" version > artifacts/eval/ci/trivy/version.txt; \
+	docker run --rm -v "$(CURDIR)":/work -w /work -v "$(CURDIR)/artifacts/.trivycache":/root/.cache "$(TRYOPS_TRIVY_IMAGE)" fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --format json --output /work/artifacts/eval/ci/trivy/filesystem.json --skip-dirs /work/artifacts --skip-dirs /work/.git --skip-dirs /work/.venv --exit-code 0 /work; \
+	uidgid="$$(id -u):$$(id -g)"; \
+	docker run --rm --user "$$uidgid" -e COSIGN_PASSWORD= -v "$(CURDIR)":/work -w /work "$(TRYOPS_COSIGN_IMAGE)" version > artifacts/eval/ci/cosign/version.txt; \
+	docker run --rm --user "$$uidgid" -e COSIGN_PASSWORD= -v "$(CURDIR)":/work -w /work "$(TRYOPS_COSIGN_IMAGE)" generate-key-pair --output-key-prefix artifacts/tmp/cosign-live/tryops-local > artifacts/eval/ci/cosign/generate-key.txt 2>&1; \
+	cp artifacts/tmp/cosign-live/tryops-local.pub artifacts/eval/ci/cosign/tryops-local.pub; \
+	docker run --rm --user "$$uidgid" -e COSIGN_PASSWORD= -v "$(CURDIR)":/work -w /work "$(TRYOPS_COSIGN_IMAGE)" sign-blob --tlog-upload=false --key artifacts/tmp/cosign-live/tryops-local.key --output-signature artifacts/eval/ci/cosign/sbom.spdx.json.sig artifacts/eval/ci/syft/filesystem.spdx.json > artifacts/eval/ci/cosign/sign-blob.txt 2>&1; \
+	docker run --rm --user "$$uidgid" -e COSIGN_PASSWORD= -v "$(CURDIR)":/work -w /work "$(TRYOPS_COSIGN_IMAGE)" verify-blob --insecure-ignore-tlog --key artifacts/eval/ci/cosign/tryops-local.pub --signature artifacts/eval/ci/cosign/sbom.spdx.json.sig artifacts/eval/ci/syft/filesystem.spdx.json > artifacts/eval/ci/cosign/verify-blob.txt 2>&1; \
+	rm -rf artifacts/tmp/cosign-live; \
+	artifacts/native/tryops_live_supply_chain --root . --output artifacts/eval/ci/live_supply_chain_report.json --syft-image "$(TRYOPS_SYFT_IMAGE)" --trivy-image "$(TRYOPS_TRIVY_IMAGE)" --cosign-image "$(TRYOPS_COSIGN_IMAGE)"
+
 native-ci-contract-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-ci-contract && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_ci_contract .
+	cd native/go/tryops-ci-contract && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_ci_contract .
 
 native-ci-contract-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-ci-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-ci-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native CI contract tests"; \
 	fi
@@ -637,14 +688,17 @@ native-ci-contract-test:
 native-ci-contract-sample: native-ci-contract-build supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-dependency-lock-contract-sample
 	artifacts/native/tryops_ci_contract --root . --output artifacts/eval/ci/native_ci_contract.json
 
+native-ci-contract-live: native-ci-contract-build native-live-supply-chain-sample supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-dependency-lock-contract-sample
+	artifacts/native/tryops_ci_contract --root . --output artifacts/eval/ci/native_ci_contract.json
+
 native-container-contract-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-container-contract && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_container_contract .
+	cd native/go/tryops-container-contract && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_container_contract .
 
 native-container-contract-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-container-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-container-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native container contract tests"; \
 	fi
@@ -654,12 +708,12 @@ native-container-contract-sample: native-container-contract-build
 
 native-distributed-quota-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-distributed-quota && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_distributed_quota .
+	cd native/go/tryops-distributed-quota && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_distributed_quota .
 
 native-distributed-quota-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-distributed-quota && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-distributed-quota && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native distributed quota tests"; \
 	fi
@@ -703,12 +757,12 @@ native-distributed-quota-smoke: native-rust-build native-distributed-quota-build
 
 native-quota-read-model-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-quota-read-model && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_quota_read_model .
+	cd native/go/tryops-quota-read-model && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_quota_read_model .
 
 native-quota-read-model-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-quota-read-model && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-quota-read-model && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native quota read model tests"; \
 	fi
@@ -718,12 +772,12 @@ native-quota-read-model-sample: native-quota-read-model-build quota-sample
 
 native-runtime-telemetry-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-runtime-telemetry && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_runtime_telemetry .
+	cd native/go/tryops-runtime-telemetry && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_runtime_telemetry .
 
 native-runtime-telemetry-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-runtime-telemetry && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-runtime-telemetry && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native runtime telemetry tests"; \
 	fi
@@ -735,12 +789,12 @@ native-runtime-telemetry-sample: native-runtime-telemetry-build
 
 native-observability-contract-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-observability-contract && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_observability_contract .
+	cd native/go/tryops-observability-contract && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_observability_contract .
 
 native-observability-contract-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-observability-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-observability-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native observability contract tests"; \
 	fi
@@ -750,12 +804,12 @@ native-observability-contract-sample: native-observability-contract-build native
 
 native-alertmanager-contract-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-alertmanager-contract && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_alertmanager_contract .
+	cd native/go/tryops-alertmanager-contract && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_alertmanager_contract .
 
 native-alertmanager-contract-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-alertmanager-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-alertmanager-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native Alertmanager contract tests"; \
 	fi
@@ -765,12 +819,12 @@ native-alertmanager-contract-sample: native-alertmanager-contract-build
 
 native-incident-workflow-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-incident-workflow && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_incident_workflow .
+	cd native/go/tryops-incident-workflow && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_incident_workflow .
 
 native-incident-workflow-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-incident-workflow && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-incident-workflow && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native incident workflow tests"; \
 	fi
@@ -780,12 +834,12 @@ native-incident-workflow-sample: native-incident-workflow-build rollback-sample
 
 native-secret-rotation-contract-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-secret-rotation-contract && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_secret_rotation_contract .
+	cd native/go/tryops-secret-rotation-contract && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_secret_rotation_contract .
 
 native-secret-rotation-contract-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-secret-rotation-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-secret-rotation-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native secret rotation contract tests"; \
 	fi
@@ -823,12 +877,12 @@ native-secret-rotation-live: native-secret-rotation-contract-build
 
 native-dependency-lock-contract-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-dependency-lock-contract && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_dependency_lock_contract .
+	cd native/go/tryops-dependency-lock-contract && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_dependency_lock_contract .
 
 native-dependency-lock-contract-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-dependency-lock-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-dependency-lock-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native dependency lock contract tests"; \
 	fi
@@ -836,14 +890,14 @@ native-dependency-lock-contract-test:
 native-dependency-lock-contract-sample: native-dependency-lock-contract-build
 	artifacts/native/tryops_dependency_lock_contract --root . --output artifacts/eval/dependencies/native_dependency_lock_contract.json
 
-native-db-migrator-build:
+native-db-migrator-build: native-go-toolchain
 	mkdir -p artifacts/native
-	cd native/go/tryops-db-migrator && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_db_migrator .
+	cd native/go/tryops-db-migrator && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_db_migrator .
 
-native-db-migrator-test:
-	@if command -v go >/dev/null 2>&1; then \
+native-db-migrator-test: native-go-toolchain
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-db-migrator && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-db-migrator && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native Postgres migrator tests"; \
 	fi
@@ -858,12 +912,12 @@ native-db-migrator-apply: native-db-migrator-build
 
 native-backup-restore-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-backup-restore && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_backup_restore .
+	cd native/go/tryops-backup-restore && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_backup_restore .
 
 native-backup-restore-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-backup-restore && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-backup-restore && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native backup/restore tests"; \
 	fi
@@ -887,12 +941,12 @@ native-tls-cert-sample:
 
 native-tls-contract-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-tls-contract && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_tls_contract .
+	cd native/go/tryops-tls-contract && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_tls_contract .
 
 native-tls-contract-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-tls-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-tls-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native TLS contract tests"; \
 	fi
@@ -902,12 +956,12 @@ native-tls-contract-sample: native-tls-contract-build native-tls-cert-sample
 
 native-performance-budget-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-performance-budget && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_performance_budget .
+	cd native/go/tryops-performance-budget && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_performance_budget .
 
 native-performance-budget-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-performance-budget && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-performance-budget && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native performance budget tests"; \
 	fi
@@ -917,12 +971,12 @@ native-performance-budget-sample: native-performance-budget-build native-rust-bu
 
 native-trace-envelope-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-trace-envelope && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_trace_envelope .
+	cd native/go/tryops-trace-envelope && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_trace_envelope .
 
 native-trace-envelope-test: native-trace-envelope-cpp-test
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-trace-envelope && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-trace-envelope && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native trace envelope Go tests"; \
 	fi
@@ -937,12 +991,12 @@ native-trace-envelope-sample: native-trace-envelope-build native-trace-envelope-
 
 native-evaluation-index-build:
 	mkdir -p artifacts/native
-	cd native/go/tryops-evaluation-index && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_evaluation_index .
+	cd native/go/tryops-evaluation-index && GOFLAGS=-mod=mod $(GO) build -buildvcs=false -o ../../../artifacts/native/tryops_evaluation_index .
 
 native-evaluation-index-test:
-	@if command -v go >/dev/null 2>&1; then \
+	@if command -v "$(GO)" >/dev/null 2>&1; then \
 		mkdir -p artifacts/.gocache; \
-		cd native/go/tryops-evaluation-index && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd native/go/tryops-evaluation-index && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod $(GO) test ./...; \
 	else \
 		echo "go not installed; skipping native evaluation index tests"; \
 	fi
@@ -1071,10 +1125,15 @@ gateway-benchmark-native: native-rust-build native-benchmark-build
 
 native-tooling:
 	@command -v $(CARGO) >/dev/null 2>&1 && $(CARGO) --version || echo "cargo not installed; build the Rust gateway with 'make native-rust-build' after installing rustup"
-	@command -v go >/dev/null 2>&1 && go version || echo "go not installed; build the Go controller with 'make native-go-build' after installing go>=1.22"
+	@command -v "$(GO)" >/dev/null 2>&1 && $(GO) version || echo "go not installed; build the Go controller with 'make native-go-build' after installing go>=1.22"
 	@$(CXX) --version | head -n 1
 
 app-up: evaluation-index-sample
+	@set -eu; \
+	$(MAKE) prepare-container-artifacts; \
+	uid=$$(id -u); gid=$$(id -g); \
+	TRYOPS_CONTAINER_UID=$$uid \
+	TRYOPS_CONTAINER_GID=$$gid \
 	TRYOPS_POSTGRES_PORT=15432 \
 	TRYOPS_POSTGRES_USER=$${TRYOPS_POSTGRES_USER:-tryops} \
 	TRYOPS_POSTGRES_DB=$${TRYOPS_POSTGRES_DB:-tryops} \
@@ -1097,9 +1156,13 @@ app-up: evaluation-index-sample
 app-smoke: native-stack-smoke-build native-job-runner-build evaluation-index-sample
 	@set -eu; \
 	project=tryops_app_smoke; \
+	$(MAKE) prepare-container-artifacts; \
+	uid=$$(id -u); gid=$$(id -g); \
 	COMPOSE_PROJECT_NAME=$$project docker compose down --volumes --remove-orphans >/dev/null 2>&1 || true; \
 	trap "COMPOSE_PROJECT_NAME=$$project docker compose down --volumes --remove-orphans >/dev/null 2>&1 || true" EXIT; \
 	COMPOSE_PROJECT_NAME=$$project \
+	TRYOPS_CONTAINER_UID=$$uid \
+	TRYOPS_CONTAINER_GID=$$gid \
 	TRYOPS_POSTGRES_PORT=15432 \
 	TRYOPS_POSTGRES_USER=$${TRYOPS_POSTGRES_USER:-tryops} \
 	TRYOPS_POSTGRES_DB=$${TRYOPS_POSTGRES_DB:-tryops} \

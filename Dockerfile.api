@@ -7,4 +7,6 @@ COPY configs ./configs
 RUN pip install --no-cache-dir fastapi uvicorn prometheus-client
 ENV PYTHONPATH=/app/src
 EXPOSE 8080
+RUN addgroup --system tryops && adduser --system --ingroup tryops --home /nonexistent --no-create-home tryops
+USER tryops
 CMD ["uvicorn", "tryops.api:create_app", "--factory", "--host", "0.0.0.0", "--port", "8080"]

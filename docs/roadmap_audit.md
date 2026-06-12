@@ -428,16 +428,18 @@ This verifies:
   health, RBAC session, evaluation summary, quota summary, LLM generation, and operator promotion
   gate traffic through the Rust gateway. The latest local run passed 6/6 scenarios with 504 total
   requests, zero errors, worst p95 39.965 ms, and explicit `k6`/`locust` unavailability records.
-- Native Go CI supply-chain contract evidence: `make native-ci-contract-sample` writes
-  `artifacts/eval/ci/native_ci_contract.json` as `tryops.native_ci_contract.v1`, proving 16/16
+- Native Go CI supply-chain contract evidence: `make native-ci-contract-live` writes
+  `artifacts/eval/ci/live_supply_chain_report.json` as `tryops.live_supply_chain.v1` and
+  `artifacts/eval/ci/native_ci_contract.json` as `tryops.native_ci_contract.v1`, proving 17/17
   checks across GitHub Actions OIDC/artifact permissions, language tests, Compose validation,
   seven-image Docker Buildx matrix, Syft SPDX SBOM generation, Trivy HIGH/CRITICAL scan gating,
-  Cosign keyless signing, `make ci`, and referenced supply-chain/vulnerability/container reports.
+  Cosign keyless signing, local live Syft/Trivy/Cosign execution, `make ci`, and referenced
+  supply-chain/vulnerability/container reports.
 - Native Go dependency-lock contract evidence: `make native-dependency-lock-contract-sample`
   writes `artifacts/eval/dependencies/native_dependency_lock_contract.json` as
-  `tryops.native_dependency_lock_contract.v1`, proving 87/87 checks across `uv.lock`,
+  `tryops.native_dependency_lock_contract.v1`, proving 89/89 checks across `uv.lock`,
   `web/package-lock.json`, Rust `Cargo.lock`, and Go module checksum coverage. Current evidence
-  records 326 locked Python packages, 59 Node packages, 228 Rust crates, and 30 Go modules.
+  records 326 locked Python packages, 59 Node packages, 228 Rust crates, and 32 Go modules.
 - Native Go secret-rotation/workload-identity contract evidence: `make native-secret-rotation-contract-sample`
   writes `artifacts/eval/secrets/native_secret_rotation_contract.json` as
   `tryops.native_secret_rotation_contract.v1`, proving 50/50 plan checks across Vault KV policy,
@@ -451,6 +453,12 @@ This verifies:
   contains `optimization_panel` with the recommended LLM variant, leaderboard rank, Pareto-frontier
   state, per-variant VRAM/energy/SCI, and carbon-gate verdict; the React Evaluation view renders the
   interactive panel; and `make app-smoke` verifies the payload through the Rust gateway.
+- Production online experimentation surface: FastAPI accepts `experiment_ab` and `experiment_bandit`
+  on `/api/llm/generate`, exposes `/api/experiments/route`, `/api/experiments/analyze`, and
+  `/api/experiments/summary`, and delegates guarded A/B plus UCB bandit routing to the native C++
+  `tryops_experiment_router` when present. The React Console now includes an Experiments board and
+  the LLM Playground can exercise the production experiment path; focused API tests verify RBAC,
+  guarded candidate blocking, and LLM generation through `experiment_bandit`.
 - Rust gateway auth preflight: `native/rust/tryops-gateway/src/auth.rs` validates scoped API keys and
   optional HS256 JWTs before proxying protected routes to FastAPI; Docker builds the gateway image
   with `configs/api_keys.json`; and `artifacts/eval/full_stack/full_stack_smoke.json` proves
@@ -486,10 +494,11 @@ These remain intentionally unchecked because evidence is not strong enough yet:
   evidence with token-file auth, but a real cluster should still exercise the External Secrets
   controller and Vault Kubernetes auth TokenReview flow.
 - KServe/Kubeflow live deployment. The local Kubeflow-target orchestration skeleton exists, but there is no cluster execution or pipeline upload yet.
-- Live Syft/Trivy/Cosign execution in this workspace. The GitHub Actions workflow and native CI
-  contract are wired, but local `production_ready=false` because Syft, Trivy, and Cosign are not
-  installed here. The vulnerability scan also records missing Grype, pip-audit, gitleaks, and
-  osv-scanner coverage.
+- Live Syft/Trivy/Cosign execution in this workspace is now covered by `make native-ci-contract-live`.
+  The latest local evidence emits `tryops.live_supply_chain.v1` with 613 Syft packages, 0
+  HIGH/CRITICAL Trivy findings, a verified Cosign SBOM signature, and
+  `tryops.native_ci_contract.v1` with `production_ready=true`. Optional secondary scanners
+  (Grype, pip-audit, gitleaks, osv-scanner) are still recorded as fallback coverage gaps.
 - Real Sigstore keyless OIDC and Rekor transparency-log verification. Local model provenance is a
   DSSE-shaped digest bundle verified by native C++, not public Sigstore transparency evidence.
 - External k6/locust load confirmation. The native Go full-stack load/SLO gate passes, but neither
@@ -502,7 +511,8 @@ These remain intentionally unchecked because evidence is not strong enough yet:
 1. ~~Add Transformers inference for SmolLM2-135M-Instruct.~~ **Done (R1):** real GPU inference behind unchanged contracts via `make llm-real-sample`.
 2. Add live AWQ/GPTQ loading, live llama.cpp GGUF generation, and live vLLM variants to extend the current fp16/8-bit/4-bit Pareto report; keep `make llm-quantized-preflight-sample` and `make llm-gguf-preflight-sample` as artifact/runtime sanity gates.
 3. Install or document Rust toolchain bootstrap so the gateway rebuilds in CI.
-4. Install Trivy or Grype and run a CVE-backed vulnerability scan against the repo or image.
+4. Add optional secondary scanner coverage (Grype, pip-audit, gitleaks, osv-scanner) around the now
+   passing Trivy-backed live scan.
 5. Add live MLflow logging around the promotion pipeline.
 6. Run the verified CLIP garment-image/text path across a fixed VTON benchmark and report confidence intervals.
 7. Real VTON (CatVTON) execution on the L4 GPU behind the existing VTON contracts.

@@ -15,6 +15,8 @@ export function LlmPlayground({ client, onMutate }: LlmPlaygroundProps) {
   const [prompt, setPrompt] = useState(samplePrompt);
   const [modelAlias, setModelAlias] = useState("baseline");
   const [quotaPlan, setQuotaPlan] = useState("free");
+  const [routingMode, setRoutingMode] = useState<"direct" | "canary" | "experiment_ab" | "experiment_bandit">("direct");
+  const [canaryPercent, setCanaryPercent] = useState(10);
   const [maxTokens, setMaxTokens] = useState(180);
   const [structured, setStructured] = useState(true);
   const [shadow, setShadow] = useState(false);
@@ -32,8 +34,8 @@ export function LlmPlayground({ client, onMutate }: LlmPlaygroundProps) {
         model_alias: modelAlias,
         max_tokens: maxTokens,
         structured,
-        routing_mode: "direct",
-        canary_percent: 0,
+        routing_mode: routingMode,
+        canary_percent: canaryPercent,
         shadow,
         optimized_available: modelAlias !== "baseline",
         fallback_enabled: true,
@@ -102,6 +104,25 @@ export function LlmPlayground({ client, onMutate }: LlmPlaygroundProps) {
                 <option key={plan} value={plan}>{plan}</option>
               ))}
             </select>
+          </label>
+          <label className="field">
+            <span>Routing</span>
+            <select onChange={(event) => setRoutingMode(event.target.value as typeof routingMode)} value={routingMode}>
+              <option value="direct">direct</option>
+              <option value="canary">canary</option>
+              <option value="experiment_ab">experiment A/B</option>
+              <option value="experiment_bandit">experiment bandit</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Canary %</span>
+            <input
+              max={100}
+              min={0}
+              onChange={(event) => setCanaryPercent(Number(event.target.value))}
+              type="number"
+              value={canaryPercent}
+            />
           </label>
           <label className="field">
             <span>Max tokens</span>

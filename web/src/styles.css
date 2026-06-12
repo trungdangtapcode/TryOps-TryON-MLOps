@@ -326,6 +326,14 @@ button {
   margin-bottom: 16px;
 }
 
+.button-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .panel-header.compact {
   margin-bottom: 12px;
 }

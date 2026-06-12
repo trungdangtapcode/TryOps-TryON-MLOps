@@ -22,16 +22,24 @@ from tryops.artifacts import (
 from tryops.auth import authenticate_api_key, authorize_admin_payload, build_rbac_session
 from tryops.contracts import ModelCandidate
 from tryops.evaluation_artifacts import load_evaluation_index
+from tryops.experiments import (
+    DEFAULT_EXPERIMENT_ID,
+    normalize_experiment_analysis_variants,
+    normalize_experiment_variants,
+    normalize_guardrail_thresholds,
+    normalize_holdback,
+)
 from tryops.guardrails import evaluate_egress_guardrails, evaluate_ingress_guardrails, merge_guardrail_verdicts
 from tryops.jobs import VTON_JOB_QUEUE, render_job_metrics
 from tryops.lineage import build_lineage_record
+from tryops.native_experiment_stats import analyze_with_native_experiment_stats
 from tryops.observability import record_api_observation, render_prometheus_metrics, sanitize_payload_metadata
 from tryops.pipelines.llm_baseline import estimate_tokens, generate_baseline_response
 from tryops.pipelines.vton_baseline import run_naive_overlay_baseline
 from tryops.policy import evaluate_promotion
 from tryops.quota import check_and_record_quota
 from tryops.quota_read_model import load_quota_read_model
-from tryops.routing import build_routing_decision
+from tryops.routing import build_experiment_routing_decision, build_routing_decision
 from tryops.semantic_cache import GLOBAL_SEMANTIC_CACHE, build_cache_metadata
 from tryops.timeouts import RequestTimeoutError, run_with_timeout, timeout_details
 from tryops.vton_native_bridge import build_native_vton_execution_evidence
@@ -353,21 +361,32 @@ def create_app() -> Any:
             _record(endpoint, request_id, "llm", clean["model_alias"], started, payload, response)
             return response
         try:
-            routing = build_routing_decision(
-                workload="llm",
-                request_id=request_id,
-                requested_alias=clean["model_alias"],
-                routing_mode=clean["routing_mode"],
-                canary_percent=clean["canary_percent"],
-                shadow=clean["shadow"],
-                fallback_enabled=clean["fallback_enabled"],
-                route_health={
-                    "baseline": "ready",
-                    "champion": "ready" if clean["optimized_available"] else "unavailable",
-                    "challenger": "ready" if clean["optimized_available"] else "unavailable",
-                    "candidate": "ready" if clean["optimized_available"] else "unavailable",
-                },
-            )
+            if clean["routing_mode"] in {"experiment_ab", "experiment_bandit"}:
+                routing = build_experiment_routing_decision(
+                    workload="llm",
+                    request_id=request_id,
+                    experiment_id=clean["experiment_id"],
+                    variants=clean["experiment_variants"],
+                    mode="ab" if clean["routing_mode"] == "experiment_ab" else "bandit",
+                    holdback_percent=clean["experiment_holdback_percent"],
+                    guardrail_thresholds=clean["experiment_guardrail_thresholds"],
+                )
+            else:
+                routing = build_routing_decision(
+                    workload="llm",
+                    request_id=request_id,
+                    requested_alias=clean["model_alias"],
+                    routing_mode=clean["routing_mode"],
+                    canary_percent=clean["canary_percent"],
+                    shadow=clean["shadow"],
+                    fallback_enabled=clean["fallback_enabled"],
+                    route_health={
+                        "baseline": "ready",
+                        "champion": "ready" if clean["optimized_available"] else "unavailable",
+                        "challenger": "ready" if clean["optimized_available"] else "unavailable",
+                        "candidate": "ready" if clean["optimized_available"] else "unavailable",
+                    },
+                )
             quota = check_and_record_quota(
                 user_id=clean["user_id"],
                 plan=clean["quota_plan"],
@@ -485,7 +504,7 @@ def create_app() -> Any:
             response["quota"] = quota
             _record(endpoint, request_id, "llm", routing["primary_alias"], started, payload, response)
             return response
-        except (KeyError, TypeError, ValueError) as exc:
+        except (KeyError, RuntimeError, TypeError, ValueError) as exc:
             response = structured_error(
                 request_id=request_id,
                 code="llm_generation_failed",
@@ -494,6 +513,93 @@ def create_app() -> Any:
             )
             _record(endpoint, request_id, "llm", clean["model_alias"], started, payload, response)
             return response
+
+    @app.get("/api/experiments/summary")
+    @app.get("/v1/experiments/summary")
+    def get_experiment_summary(api_key: str = None) -> dict[str, Any]:
+        auth = authenticate_api_key(api_key, required_scope="admin:read")
+        if not auth["allowed"]:
+            return _admin_auth_error("unknown", auth, "experiments")
+        routing_report = _optional_json_artifact("artifacts/eval/experiments/online_experiment_report.json")
+        analysis_report = _optional_json_artifact("artifacts/eval/experiments/online_experiment_analysis_report.json")
+        passed = bool(routing_report.get("passed")) and bool(analysis_report.get("passed"))
+        native_ready = (
+            routing_report.get("decisions", {})
+            .get("bandit", {})
+            .get("experiment", {})
+            .get("source")
+            == "native_cpp_cli"
+        ) and (
+            analysis_report.get("native_experiment_stats", {}).get("source") == "native_cpp_cli"
+        )
+        return {
+            "status": "ok",
+            "data": {
+                "schema_version": "tryops.experiment_console.v1",
+                "experiment_id": routing_report.get("decisions", {})
+                .get("bandit", {})
+                .get("experiment_id", DEFAULT_EXPERIMENT_ID),
+                "production_ready": passed and native_ready,
+                "routing_report": routing_report,
+                "analysis_report": analysis_report,
+            },
+        }
+
+    @app.post("/api/experiments/route")
+    @app.post("/v1/experiments/route")
+    def experiment_route(payload: dict[str, Any]) -> dict[str, Any]:
+        request_id = request_id_from_payload(payload)
+        auth = authorize_admin_payload(payload, required_scope="admin:read")
+        if not auth["allowed"]:
+            return _admin_auth_error(request_id, auth, "experiments")
+        try:
+            mode = str(payload.get("mode", "bandit"))
+            if mode not in {"ab", "bandit"}:
+                raise ValueError("mode must be 'ab' or 'bandit'")
+            decision = build_experiment_routing_decision(
+                workload=str(payload.get("workload", "llm")),
+                request_id=request_id,
+                experiment_id=str(payload.get("experiment_id", DEFAULT_EXPERIMENT_ID)),
+                variants=normalize_experiment_variants(payload.get("variants")),
+                mode=mode,
+                holdback_percent=float(payload.get("holdback_percent", 5.0)),
+                guardrail_thresholds=normalize_guardrail_thresholds(payload.get("guardrail_thresholds")),
+            )
+            return {"status": "ok", "request_id": request_id, "data": decision, "auth": auth}
+        except (RuntimeError, TypeError, ValueError) as exc:
+            return structured_error(
+                request_id=request_id,
+                code="experiment_route_failed",
+                message=str(exc),
+                workload="experiments",
+            )
+
+    @app.post("/api/experiments/analyze")
+    @app.post("/v1/experiments/analyze")
+    def experiment_analyze(payload: dict[str, Any]) -> dict[str, Any]:
+        request_id = request_id_from_payload(payload)
+        auth = authorize_admin_payload(payload, required_scope="admin:read")
+        if not auth["allowed"]:
+            return _admin_auth_error(request_id, auth, "experiments")
+        try:
+            stats = analyze_with_native_experiment_stats(
+                holdback=normalize_holdback(payload.get("holdback")),
+                variants=normalize_experiment_analysis_variants(payload.get("variants")),
+                experiment_id=str(payload.get("experiment_id", DEFAULT_EXPERIMENT_ID)),
+                confidence=float(payload.get("confidence", 0.95)),
+                alpha=float(payload.get("alpha", 0.05)),
+                beta=float(payload.get("beta", 0.20)),
+                min_detectable_effect=float(payload.get("min_detectable_effect", 0.05)),
+                min_sample_size=float(payload.get("min_sample_size", 100.0)),
+            )
+            return {"status": "ok", "request_id": request_id, "data": stats, "auth": auth}
+        except (RuntimeError, TypeError, ValueError) as exc:
+            return structured_error(
+                request_id=request_id,
+                code="experiment_analysis_failed",
+                message=str(exc),
+                workload="experiments",
+            )
 
     @app.get("/api/history")
     def get_history(api_key: str = None, kind: str = None, limit: int = 50) -> dict[str, Any]:
@@ -759,6 +865,19 @@ def _record(
     finally:
         if 'conn' in locals():
             conn.close()
+
+
+def _optional_json_artifact(path: str) -> dict[str, Any]:
+    try:
+        return load_json_artifact(path)
+    except (OSError, ValueError) as exc:
+        return {
+            "schema_version": "tryops.optional_artifact_missing.v1",
+            "path": path,
+            "passed": False,
+            "status": "missing",
+            "reason": str(exc),
+        }
 
 
 def _write_vton_report_sidecar(report: dict[str, Any]) -> None:

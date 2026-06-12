@@ -37,7 +37,11 @@
   has native evidence for hash-only API-key rotation, Vault/External Secrets manifests, Kubernetes
   workload identity, and live local Vault KV rotation, but production OIDC/JWKS and External Secrets
   controller sync still need to be exercised.
-- A local SPDX SBOM fallback is generated, `make vulnerability-scan-sample` runs the available `npm audit` check for `web/`, and `.github/workflows/ci.yml` plus `make native-ci-contract-sample` define the Syft/Trivy/Cosign production path, but Syft, Trivy, Grype, pip-audit, gitleaks, osv-scanner, and Cosign are not installed in this workspace.
+- A local SPDX SBOM fallback is generated, `make vulnerability-scan-sample` runs the available
+  `npm audit` check for `web/`, and `make native-ci-contract-live` now executes pinned
+  Syft/Trivy/Cosign containers with production-ready evidence. Optional secondary scanner coverage
+  from Grype, pip-audit, gitleaks, and osv-scanner is still not present.
 - Model provenance uses a local DSSE-shaped digest bundle verified by native C++; real Sigstore
   keyless OIDC identity and Rekor transparency-log proof are not generated locally yet.
-- Local vulnerability evidence is partial: npm audit found 0 web vulnerabilities, but Python, container, OS-package, secret, and misconfiguration scans still need production scanners.
+- The legacy host-installed-tool vulnerability report is still partial by design; the production
+  scanner gate is now the live Trivy filesystem scan inside `tryops.live_supply_chain.v1`.

@@ -5,6 +5,10 @@ import (
 )
 
 func evaluate(cfg Config) (Report, error) {
+	return evaluateWithTools(cfg, discoverTools())
+}
+
+func evaluateWithTools(cfg Config, tools []ToolStatus) (Report, error) {
 	workflow, err := readText(cfg.RootPath, cfg.WorkflowPath)
 	if err != nil {
 		return Report{}, err
@@ -13,8 +17,11 @@ func evaluate(cfg Config) (Report, error) {
 	if err != nil {
 		return Report{}, err
 	}
-	tools := discoverTools()
 	missing := missingRequiredTools(tools)
+	liveReady := liveSupplyChainReady(cfg.RootPath, cfg)
+	if liveReady {
+		missing = filterMissingForLiveSupplyChain(missing)
+	}
 	checks := append(validateWorkflow(workflow), validateMakefile(makefile)...)
 	evidence, evidenceChecks := inspectEvidence(cfg.RootPath, cfg)
 	checks = append(checks, evidenceChecks...)
@@ -52,7 +59,7 @@ func evaluate(cfg Config) (Report, error) {
 		},
 		Notes: []string{
 			"The workflow has production CI wiring for tests, image build, SBOM, Trivy scan, artifact upload, and Cosign keyless signing.",
-			"Local production readiness remains false until required external tools and CVE/signing evidence are available in this workspace.",
+			"Local production readiness accepts pinned container executions of Syft, Trivy, and Cosign when the live report passes, so host PATH installation is not required.",
 		},
 	}, nil
 }

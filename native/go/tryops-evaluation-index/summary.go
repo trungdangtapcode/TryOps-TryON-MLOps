@@ -36,6 +36,8 @@ func summaryForReport(path string, data map[string]interface{}) []summaryItem {
 		return summaryVLLMProbe(data)
 	case "tryops.vulnerability_scan.v1":
 		return summaryVulnerability(data)
+	case "tryops.live_supply_chain.v1":
+		return summaryLiveSupplyChain(data)
 	case "tryops.native_ci_contract.v1":
 		return summaryCIContract(data)
 	case "tryops.native_dependency_lock_contract.v1":
@@ -260,6 +262,19 @@ func summaryVulnerability(data map[string]interface{}) []summaryItem {
 		{Label: "coverage", Value: stringField(data, "coverage_level")},
 		{Label: "production ready", Value: formatValue(data["production_ready"])},
 		{Label: "missing tools", Value: fmt.Sprintf("%d", len(missing))},
+	}
+}
+
+func summaryLiveSupplyChain(data map[string]interface{}) []summaryItem {
+	syft := objectField(data, "syft")
+	trivy := objectField(data, "trivy")
+	cosign := objectField(data, "cosign")
+	return []summaryItem{
+		{Label: "passed", Value: formatValue(data["passed"])},
+		{Label: "production ready", Value: formatValue(data["production_ready"])},
+		{Label: "syft packages", Value: formatValue(syft["package_count"])},
+		{Label: "trivy high/critical", Value: formatValue(trivy["total_high_critical"])},
+		{Label: "cosign verified", Value: formatValue(cosign["verified"])},
 	}
 }
 

@@ -46,6 +46,12 @@ class ApiSurfaceTests(unittest.TestCase):
         self.assertIn("/v1/quota/summary", paths)
         self.assertIn("/api/evaluations/summary", paths)
         self.assertIn("/v1/evaluations/summary", paths)
+        self.assertIn("/api/experiments/summary", paths)
+        self.assertIn("/v1/experiments/summary", paths)
+        self.assertIn("/api/experiments/route", paths)
+        self.assertIn("/v1/experiments/route", paths)
+        self.assertIn("/api/experiments/analyze", paths)
+        self.assertIn("/v1/experiments/analyze", paths)
         self.assertIn("/api/vton/comparison", paths)
         self.assertIn("/api/incidents/workflow", paths)
         self.assertIn("/v1/incidents/workflow", paths)
@@ -84,6 +90,7 @@ class ApiSurfaceTests(unittest.TestCase):
         self.assertEqual(viewer["status"], "ok")
         self.assertEqual(viewer["data"]["principal"]["role"], "viewer")
         self.assertIn("dashboard", viewer["data"]["permissions"]["nav"])
+        self.assertIn("experiments", viewer["data"]["permissions"]["nav"])
         self.assertNotIn("incidents", viewer["data"]["permissions"]["nav"])
         self.assertEqual(operator["data"]["principal"]["role"], "operator")
         self.assertIn("incidents", operator["data"]["permissions"]["nav"])
@@ -666,6 +673,99 @@ class ApiSurfaceTests(unittest.TestCase):
         self.assertEqual(decision["shadow_alias"], "champion")
         self.assertEqual(response["status"], "completed")
         self.assertIn("tokens_per_second", response["metrics"])
+
+    def test_llm_experiment_routing_mode_validation_and_generation(self) -> None:
+        try:
+            app = create_app()
+        except RuntimeError as exc:
+            self.skipTest(str(exc))
+
+        clean, errors = validate_llm_payload(
+            {
+                "request_id": "req-experiment-llm",
+                "prompt": "Compare guarded A/B routing with bandit allocation.",
+                "model_alias": "champion",
+                "routing_mode": "experiment_bandit",
+                "max_tokens": 64,
+                "quota_plan": "free",
+                "user_id": "experiment-user",
+            }
+        )
+        endpoint = _endpoint_for(app, "/api/llm/generate")
+        reset_quota_usage()
+        response = endpoint(
+            {
+                "request_id": "req-experiment-llm",
+                "prompt": clean["prompt"],
+                "model_alias": clean["model_alias"],
+                "routing_mode": clean["routing_mode"],
+                "max_tokens": clean["max_tokens"],
+                "quota_plan": clean["quota_plan"],
+                "user_id": clean["user_id"],
+            }
+        )
+
+        self.assertEqual(errors, [])
+        self.assertEqual(response["status"], "completed")
+        self.assertEqual(response["routing"]["mode"], "experiment_bandit")
+        self.assertEqual(response["routing"]["experiment"]["schema_version"], "tryops.native_experiment_router.v1")
+        self.assertIn(response["routing"]["primary_alias"], {"champion", "challenger"})
+
+    def test_experiment_route_endpoint_requires_auth_and_blocks_guardrail_candidate(self) -> None:
+        try:
+            app = create_app()
+        except RuntimeError as exc:
+            self.skipTest(str(exc))
+
+        endpoint = _endpoint_for(app, "/api/experiments/route")
+        payload = {
+            "request_id": "req-experiment-route",
+            "mode": "bandit",
+            "experiment_id": "tryops-llm-answer-quality",
+            "variants": [
+                {
+                    "name": "champion",
+                    "adapter": "tryops-rule-baseline",
+                    "allocation_percent": 45,
+                    "impressions": 1000,
+                    "rewards": 820,
+                    "guardrail_block_rate": 0.002,
+                    "latency_p95_ms": 42,
+                    "error_rate": 0.002,
+                },
+                {
+                    "name": "challenger",
+                    "adapter": "tryops-rule-baseline",
+                    "allocation_percent": 45,
+                    "impressions": 500,
+                    "rewards": 465,
+                    "guardrail_block_rate": 0.004,
+                    "latency_p95_ms": 38,
+                    "error_rate": 0.003,
+                },
+                {
+                    "name": "candidate",
+                    "adapter": "tryops-rule-baseline",
+                    "allocation_percent": 10,
+                    "impressions": 50,
+                    "rewards": 49,
+                    "guardrail_block_rate": 0.08,
+                    "latency_p95_ms": 35,
+                    "error_rate": 0.003,
+                },
+            ],
+            "guardrail_thresholds": {"max_block_rate": 0.02, "max_latency_p95_ms": 120, "max_error_rate": 0.01},
+        }
+
+        denied = endpoint(payload)
+        allowed = endpoint({**payload, "api_key": "tryops-viewer-demo-key"})
+        candidate = next(item for item in allowed["data"]["experiment"]["variants"] if item["name"] == "candidate")
+
+        self.assertEqual(denied["status"], "rejected")
+        self.assertEqual(allowed["status"], "ok")
+        self.assertEqual(allowed["data"]["mode"], "experiment_bandit")
+        self.assertFalse(candidate["eligible"])
+        self.assertIn("guardrail_block_rate", candidate["violations"])
 
     def test_structured_vton_validation_error_contract(self) -> None:
         clean, errors = validate_vton_payload({"request_id": "req-vton", "model_alias": "unknown"})

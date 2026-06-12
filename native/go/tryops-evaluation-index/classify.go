@@ -71,6 +71,8 @@ func titleForPath(path string, data map[string]interface{}) string {
 		return "Native Go job runner"
 	case "tryops.vulnerability_scan.v1":
 		return "Vulnerability scan coverage"
+	case "tryops.live_supply_chain.v1":
+		return "Live Syft/Trivy/Cosign supply-chain evidence"
 	case "tryops.native_ci_contract.v1":
 		return "Native CI supply-chain contract"
 	case "tryops.native_dependency_lock_contract.v1":
