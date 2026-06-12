@@ -73,6 +73,9 @@ jobs:
       - name: Generate supply-chain and vulnerability evidence
         run: make supply-chain-sample vulnerability-scan-sample
 
+      - name: Generate dependency lock evidence
+        run: make native-dependency-lock-contract-sample
+
       - name: Generate secret rotation evidence
         run: make native-secret-rotation-contract-sample
 
@@ -92,7 +95,7 @@ jobs:
           path: |
             artifacts/eval
             reports/generated
-            requirements.lock
+            uv.lock
           retention-days: 14
 
   images-and-supply-chain:

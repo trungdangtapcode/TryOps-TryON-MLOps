@@ -92,7 +92,10 @@ The repository is no longer only a plan. It now contains:
 - Native C++ online experiment router and experiment statistics engine for guarded A/B allocation, holdback, UCB-style bandit traffic shifts, uplift CIs, and sequential early-stop verdicts over the existing routing layer.
 - Native C++ VTON advanced evaluator for identity, masked fidelity, pose, fairness, and preference ranking evidence, with generated model-card bias/limitation updates.
 - Native C++ LLM batch scheduler comparing request-level static batching with iteration-level continuous batching over a mixed concurrent request stream.
-- Dependency lockfile, local SPDX SBOM fallback, model-source pins, and dataset license/usage inventories.
+- Dependency lockfile evidence: `uv.lock` pins the Python project resolution, including
+  `accelerate` and `bitsandbytes`; `web/package-lock.json`, Rust `Cargo.lock`, and Go `go.sum`
+  cover the native/frontend surfaces; the native Go contract verifies all four ecosystems.
+  The older generated `requirements.lock` remains as a local SPDX fallback input.
 - Kubeflow-target orchestration skeleton with a validated seven-step enterprise DAG.
 - Deployment package, release notes, rollback plan, rollback record, run context, experiment log, and LLM load-test artifacts.
 - **R1 real LLM (GPU): real `SmolLM2-135M-Instruct` inference via Transformers on CUDA (NVIDIA L4), behind the unchanged `tryops.llm_generation.v1` / `tryops.llm_benchmark.v1` contracts, with a per-record deterministic fallback. Measured ~18.5 tok/s and 0.28 GB VRAM on the golden prompt set (`make llm-real-sample`).**
@@ -288,7 +291,9 @@ The repository is no longer only a plan. It now contains:
 - `configs/model_sources.json`
 - `configs/dataset_licenses.json`
 - `configs/service_level_objectives.json`
+- `uv.lock`
 - `requirements.lock`
+- `artifacts/eval/dependencies/native_dependency_lock_contract.json`
 - `scripts/generate_orchestration_skeleton.py`
 - `scripts/generate_llm_optimization_report.py`
 - `scripts/validate_dataset_manifest.py`
@@ -376,7 +381,7 @@ This verifies:
 - LLM quantization Pareto report and chart generation.
 - Usage-based quota simulation artifact.
 - Least-privilege API-key authorization simulation artifact.
-- Dependency lock, SPDX SBOM fallback, and source/license inventory evidence.
+- Native dependency-lock contract, SPDX SBOM fallback, and source/license inventory evidence.
 - Kubeflow-target orchestration skeleton and DAG validation evidence.
 - Optimized LLM fallback routing artifact.
 - Async VTON job simulation artifact.
@@ -427,6 +432,11 @@ This verifies:
   checks across GitHub Actions OIDC/artifact permissions, language tests, Compose validation,
   seven-image Docker Buildx matrix, Syft SPDX SBOM generation, Trivy HIGH/CRITICAL scan gating,
   Cosign keyless signing, `make ci`, and referenced supply-chain/vulnerability/container reports.
+- Native Go dependency-lock contract evidence: `make native-dependency-lock-contract-sample`
+  writes `artifacts/eval/dependencies/native_dependency_lock_contract.json` as
+  `tryops.native_dependency_lock_contract.v1`, proving 87/87 checks across `uv.lock`,
+  `web/package-lock.json`, Rust `Cargo.lock`, and Go module checksum coverage. Current evidence
+  records 326 locked Python packages, 59 Node packages, 228 Rust crates, and 30 Go modules.
 - Native Go secret-rotation/workload-identity contract evidence: `make native-secret-rotation-contract-sample`
   writes `artifacts/eval/secrets/native_secret_rotation_contract.json` as
   `tryops.native_secret_rotation_contract.v1`, proving 50/50 plan checks across Vault KV policy,

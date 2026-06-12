@@ -202,13 +202,17 @@ Date: 2026-06-11
 - Command: `make supply-chain-sample`
 - Workload: security and governance
 - Evidence files:
+  - `uv.lock`
   - `requirements.lock`
+  - `artifacts/eval/dependencies/native_dependency_lock_contract.json`
   - `configs/model_sources.json`
   - `configs/dataset_licenses.json`
   - `artifacts/eval/supply_chain/dependency_lock.json`
   - `artifacts/eval/supply_chain/sbom.spdx.json`
   - `artifacts/eval/supply_chain/supply_chain_report.json`
-- Outcome: pins direct dependencies, writes a local SPDX 2.3 SBOM fallback, audits model-source licenses, and records dataset usage restrictions
+- Outcome: pins the full Python project resolution in `uv.lock`, preserves the legacy
+  `requirements.lock` fallback for the local SPDX generator, writes a local SPDX 2.3 SBOM fallback,
+  audits model-source licenses, and records dataset usage restrictions.
 - Notes: Syft, Trivy, Grype, and pip-audit are not installed locally, so CVE-backed vulnerability scanning remains open
 
 ## EXP-022: Kubeflow-Target Orchestration Skeleton
@@ -1627,3 +1631,28 @@ Date: 2026-06-11
 - Notes: this partially completes PA060. `production_ready=false` is intentional until a real
   Vault/External Secrets deployment is available and `VAULT_ADDR` plus
   `TRYOPS_WORKLOAD_IDENTITY_TOKEN_PATH` are exercised with a live secret fetch and rotation drill.
+
+## EXP-089: Native Dependency Lock Contract
+
+- Command: `uv lock`; `make native-dependency-lock-contract-test`;
+  `make native-dependency-lock-contract-sample`; `make native-ci-contract-test`;
+  `make native-evaluation-index-test evaluation-index-sample`
+- Workload: PA063 dependency-lock reproducibility across Python, Node, Rust, and Go surfaces
+- Evidence files:
+  - `pyproject.toml`
+  - `uv.lock`
+  - `web/package-lock.json`
+  - `native/rust/tryops-gateway/Cargo.lock`
+  - `native/go/*/go.mod`
+  - `native/go/*/go.sum`
+  - `native/go/tryops-dependency-lock-contract/`
+  - `artifacts/eval/dependencies/native_dependency_lock_contract.json`
+  - `artifacts/eval/evaluation_index/evaluation_index.json`
+- Outcome: `uv.lock` pins the Python project resolution, including `accelerate=1.14.0`,
+  `bitsandbytes=0.49.2`, `torch=2.11.0`, `transformers=5.11.0`, and `vllm=0.22.1`. The split Go
+  verifier checks Python, Console, Rust gateway, and native Go module locks and passed 87/87 checks
+  with 326 Python packages, 59 Node packages, 228 Rust crates, and 30 Go modules. The evaluation
+  index highlights the report as `dependency_lock`.
+- Notes: this closes PA063 for local/native reproducibility evidence. The older generated
+  `requirements.lock` remains as a supply-chain fallback artifact, while `uv.lock` is the canonical
+  resolved Python project lock.

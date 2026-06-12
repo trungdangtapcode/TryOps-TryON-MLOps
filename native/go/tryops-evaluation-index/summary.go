@@ -38,6 +38,8 @@ func summaryForReport(path string, data map[string]interface{}) []summaryItem {
 		return summaryVulnerability(data)
 	case "tryops.native_ci_contract.v1":
 		return summaryCIContract(data)
+	case "tryops.native_dependency_lock_contract.v1":
+		return summaryDependencyLock(data)
 	case "tryops.native_config_contract.v1":
 		return summaryConfigContract(data)
 	case "tryops.native_postgres_migration.v1":
@@ -275,6 +277,19 @@ func summaryCIContract(data map[string]interface{}) []summaryItem {
 		{Label: "production ready", Value: formatValue(data["production_ready"])},
 		{Label: "checks", Value: fmt.Sprintf("%d/%d", passedChecks, len(checks))},
 		{Label: "missing tools", Value: fmt.Sprintf("%d", len(missing))},
+	}
+}
+
+func summaryDependencyLock(data map[string]interface{}) []summaryItem {
+	summary := objectField(data, "summary")
+	return []summaryItem{
+		{Label: "passed", Value: formatValue(data["passed"])},
+		{Label: "coverage", Value: stringField(data, "coverage_level")},
+		{Label: "checks", Value: formatValue(summary["passed_checks"]) + "/" + formatValue(summary["total_checks"])},
+		{Label: "python locked", Value: formatValue(summary["python_locked"])},
+		{Label: "node locked", Value: formatValue(summary["node_locked"])},
+		{Label: "rust locked", Value: formatValue(summary["rust_locked"])},
+		{Label: "go modules", Value: formatValue(summary["go_modules"])},
 	}
 }
 

@@ -26,6 +26,7 @@ make native-cpp-test
 docker compose config --quiet
 docker compose --profile tls config --quiet
 make native-container-contract-sample
+make native-dependency-lock-contract-sample
 make native-ci-contract-sample
 make evaluation-index-sample
 actions/upload-artifact@v4
@@ -82,6 +83,7 @@ make native-cpp-test
 docker compose config --quiet
 docker compose --profile tls config --quiet
 make native-container-contract-sample
+make native-dependency-lock-contract-sample
 make native-ci-contract-sample
 make evaluation-index-sample
 actions/upload-artifact@v4
@@ -110,7 +112,7 @@ cosign sign --yes
 github.event_name != 'pull_request'
 `)
 	writeFile(t, root, "Makefile", `
-ci: test web-typecheck native-go-test native-rust-test native-cpp-test supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-ci-contract-sample evaluation-index-sample
+ci: test web-typecheck native-go-test native-rust-test native-cpp-test supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-dependency-lock-contract-sample native-ci-contract-sample evaluation-index-sample
 native-ci-contract-build:
 native-ci-contract-test:
 native-ci-contract-sample:

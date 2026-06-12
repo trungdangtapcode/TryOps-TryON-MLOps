@@ -70,7 +70,9 @@ make model-supply-chain-sample
 ```
 
 ```text
+uv.lock
 requirements.lock
+artifacts/eval/dependencies/native_dependency_lock_contract.json
 artifacts/eval/supply_chain/sbom.spdx.json
 artifacts/eval/supply_chain/supply_chain_report.json
 artifacts/eval/model_supply_chain/model_supply_chain_report.json

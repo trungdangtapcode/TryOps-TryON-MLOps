@@ -193,6 +193,47 @@ Current binary:
 artifacts/native/tryops_config_contract
 ```
 
+## Go Dependency Lock Contract Gate
+
+Path: `native/go/tryops-dependency-lock-contract`
+
+Purpose:
+
+- Validates PA063 dependency-lock evidence across Python, Node, Rust, and Go without Python runtime
+  scripts.
+- Checks `uv.lock` covers every dependency declared in `pyproject.toml`, including the
+  accelerate/bitsandbytes ML packages that previously drifted during benchmark runs.
+- Checks `web/package-lock.json` locks Console direct dependencies with integrity metadata.
+- Checks Rust gateway `Cargo.lock` covers direct `Cargo.toml` dependencies for the compiled edge
+  binary.
+- Checks every native Go module with external requirements has matching `go.sum` checksum coverage.
+- Emits `tryops.native_dependency_lock_contract.v1` for the Console evidence registry.
+
+Source layout:
+
+- `main.go`: thin CLI entrypoint.
+- `config.go`: root and lockfile path flags.
+- `files.go`: rooted JSON/text loading and report writing helpers.
+- `python.go`: `pyproject.toml` dependency extraction and `uv.lock` package/hash checks.
+- `node.go`: `package.json` and `package-lock.json` direct dependency checks.
+- `rust.go`: Rust gateway `Cargo.toml`/`Cargo.lock` checks.
+- `golang.go`: native Go `go.mod`/`go.sum` checksum coverage checks.
+- `report.go`, `types.go`: evidence output and summary contracts.
+- `dependency_lock_test.go`: temp-root regression coverage for all ecosystems.
+
+Verified commands:
+
+```bash
+make native-dependency-lock-contract-test
+make native-dependency-lock-contract-sample
+```
+
+Current binary:
+
+```text
+artifacts/native/tryops_dependency_lock_contract
+```
+
 ## Go Secret Rotation Contract Gate
 
 Path: `native/go/tryops-secret-rotation-contract`

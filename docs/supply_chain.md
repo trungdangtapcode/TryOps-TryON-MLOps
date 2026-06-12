@@ -11,16 +11,19 @@ Run:
 ```bash
 make supply-chain-sample
 make model-supply-chain-sample
+make native-dependency-lock-contract-sample
 make native-ci-contract-sample
 ```
 
 Artifacts:
 
 ```text
+uv.lock
 requirements.lock
 artifacts/eval/supply_chain/dependency_lock.json
 artifacts/eval/supply_chain/sbom.spdx.json
 artifacts/eval/supply_chain/supply_chain_report.json
+artifacts/eval/dependencies/native_dependency_lock_contract.json
 artifacts/eval/model_supply_chain/model_supply_chain_report.json
 artifacts/eval/model_supply_chain/safe_model_artifact_scan.json
 artifacts/eval/model_supply_chain/unsafe_model_artifact_scan.json
@@ -33,7 +36,11 @@ artifacts/eval/ci/native_ci_contract.json
 
 ## What The Report Covers
 
-- Direct project dependencies from `pyproject.toml` pinned into `requirements.lock`.
+- Full Python project resolution pinned in `uv.lock`, including the ML packages that previously
+  drifted during benchmark runs (`accelerate` and `bitsandbytes`).
+- Native Go dependency-lock contract over `uv.lock`, `web/package-lock.json`, Rust `Cargo.lock`, and
+  Go `go.mod`/`go.sum` checksum coverage.
+- Legacy local fallback dependency export in `requirements.lock` for the existing SPDX fallback.
 - Installed local package versions when present.
 - Lower-bound pins for optional or runtime dependencies not installed in this workspace.
 - SPDX 2.3 JSON SBOM generated from the dependency lock plus model and dataset source inventories.

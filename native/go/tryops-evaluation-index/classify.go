@@ -37,7 +37,7 @@ func categoryForPath(path string, data map[string]interface{}) string {
 		return "platform"
 	case strings.Contains(path, "/data_versioning/") || strings.Contains(schema, "dvc_minio"):
 		return "platform"
-	case strings.Contains(path, "/governance/") || strings.Contains(path, "/guardrails/") || strings.Contains(path, "/security/") || strings.Contains(path, "/supply_chain/") || strings.Contains(path, "/events/") || strings.Contains(path, "/ci/") || strings.Contains(schema, "vulnerability") || strings.Contains(schema, "ci_contract") || strings.Contains(schema, "event_dispatcher"):
+	case strings.Contains(path, "/governance/") || strings.Contains(path, "/guardrails/") || strings.Contains(path, "/security/") || strings.Contains(path, "/supply_chain/") || strings.Contains(path, "/events/") || strings.Contains(path, "/ci/") || strings.Contains(path, "/dependencies/") || strings.Contains(schema, "vulnerability") || strings.Contains(schema, "ci_contract") || strings.Contains(schema, "dependency_lock") || strings.Contains(schema, "event_dispatcher"):
 		return "governance"
 	case strings.Contains(path, "/full_stack/") || strings.Contains(path, "/demo_acceptance/") || strings.Contains(path, "/demo_video/") || strings.Contains(path, "/endpoint_smoke/") || strings.Contains(schema, "job_runner") || strings.Contains(schema, "professor_demo_video"):
 		return "acceptance"
@@ -73,6 +73,8 @@ func titleForPath(path string, data map[string]interface{}) string {
 		return "Vulnerability scan coverage"
 	case "tryops.native_ci_contract.v1":
 		return "Native CI supply-chain contract"
+	case "tryops.native_dependency_lock_contract.v1":
+		return "Native dependency lock contract"
 	case "tryops.native_slo_gate.v1":
 		return "Native SLO regression gate"
 	case "tryops.native_event_dispatcher.v1":

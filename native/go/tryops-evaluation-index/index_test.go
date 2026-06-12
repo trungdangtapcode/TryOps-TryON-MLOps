@@ -109,6 +109,12 @@ func TestCategoryForPath(t *testing.T) {
 	if ciCategory != "governance" {
 		t.Fatalf("unexpected ci category: %q", ciCategory)
 	}
+	dependencyCategory := categoryForPath("artifacts/eval/dependencies/native_dependency_lock_contract.json", map[string]interface{}{
+		"schema_version": "tryops.native_dependency_lock_contract.v1",
+	})
+	if dependencyCategory != "governance" {
+		t.Fatalf("unexpected dependency category: %q", dependencyCategory)
+	}
 	containerCategory := categoryForPath("artifacts/eval/containers/native_container_contract_report.json", map[string]interface{}{
 		"schema_version": "tryops.native_container_contract.v1",
 	})
@@ -141,6 +147,24 @@ func TestSummaryCIContract(t *testing.T) {
 	})
 	if len(items) != 5 || items[3].Value != "2/3" || items[4].Value != "3" {
 		t.Fatalf("unexpected CI summary: %#v", items)
+	}
+}
+
+func TestSummaryDependencyLock(t *testing.T) {
+	items := summaryDependencyLock(map[string]interface{}{
+		"passed":         true,
+		"coverage_level": "native_dependency_lock_contract",
+		"summary": map[string]interface{}{
+			"passed_checks": float64(32),
+			"total_checks":  float64(32),
+			"python_locked": float64(327),
+			"node_locked":   float64(92),
+			"rust_locked":   float64(188),
+			"go_modules":    float64(29),
+		},
+	})
+	if len(items) != 7 || items[2].Value != "32/32" || items[6].Value != "29" {
+		t.Fatalf("unexpected dependency lock summary: %#v", items)
 	}
 }
 
@@ -467,6 +491,20 @@ func TestSelectHighlightsIncludesCIContract(t *testing.T) {
 	report, ok := highlights["ci_contract"]
 	if !ok || report.SchemaVersion != "tryops.native_ci_contract.v1" {
 		t.Fatalf("expected CI contract highlight: %#v", highlights)
+	}
+}
+
+func TestSelectHighlightsIncludesDependencyLock(t *testing.T) {
+	highlights := selectHighlights([]artifactReport{
+		{
+			Name:          "native_dependency_lock_contract",
+			Path:          "artifacts/eval/dependencies/native_dependency_lock_contract.json",
+			SchemaVersion: "tryops.native_dependency_lock_contract.v1",
+		},
+	})
+	report, ok := highlights["dependency_lock"]
+	if !ok || report.SchemaVersion != "tryops.native_dependency_lock_contract.v1" {
+		t.Fatalf("expected dependency lock highlight: %#v", highlights)
 	}
 }
 
