@@ -239,6 +239,25 @@ func TestSummaryAlertmanagerContract(t *testing.T) {
 	}
 }
 
+func TestSummarySecretRotationContract(t *testing.T) {
+	items := summarySecretRotationContract(map[string]interface{}{
+		"passed":           true,
+		"production_ready": false,
+		"coverage_level":   "native_secret_rotation_plan_contract",
+		"summary": map[string]interface{}{
+			"passed_checks":   float64(34),
+			"total_checks":    float64(34),
+			"managed_secrets": float64(8),
+		},
+		"live_readiness": map[string]interface{}{
+			"mode": "plan",
+		},
+	})
+	if len(items) != 6 || items[3].Value != "34/34" || items[5].Value != "plan" {
+		t.Fatalf("unexpected secret rotation summary: %#v", items)
+	}
+}
+
 func TestSummaryIncidentWorkflow(t *testing.T) {
 	items := summaryIncidentWorkflow(map[string]interface{}{
 		"passed":         true,
@@ -518,6 +537,20 @@ func TestSelectHighlightsIncludesIncidentWorkflow(t *testing.T) {
 	report, ok := highlights["incident_workflow"]
 	if !ok || report.SchemaVersion != "tryops.native_incident_workflow.v1" {
 		t.Fatalf("expected incident workflow highlight: %#v", highlights)
+	}
+}
+
+func TestSelectHighlightsIncludesSecretRotation(t *testing.T) {
+	highlights := selectHighlights([]artifactReport{
+		{
+			Name:          "native_secret_rotation_contract",
+			Path:          "artifacts/eval/secrets/native_secret_rotation_contract.json",
+			SchemaVersion: "tryops.native_secret_rotation_contract.v1",
+		},
+	})
+	report, ok := highlights["secret_rotation"]
+	if !ok || report.SchemaVersion != "tryops.native_secret_rotation_contract.v1" {
+		t.Fatalf("expected secret rotation highlight: %#v", highlights)
 	}
 }
 

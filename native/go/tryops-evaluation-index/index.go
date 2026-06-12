@@ -83,6 +83,7 @@ func selectHighlights(reports []artifactReport) map[string]artifactReport {
 		"postgres_migration": {schema: "tryops.native_postgres_migration.v1", preferredSub: "postgres/native_postgres_migration_live.json"},
 		"backup_restore":     {schema: "tryops.native_backup_restore_drill.v1", preferredSub: "backup/native_backup_restore_live.json"},
 		"tls_contract":       {schema: "tryops.native_tls_contract.v1", preferredSub: "tls/native_tls_contract_live.json"},
+		"secret_rotation":    {schema: "tryops.native_secret_rotation_contract.v1", preferredSub: "secrets/native_secret_rotation_contract.json"},
 		"fullstack_load":     {schema: "tryops.native_fullstack_load.v1", preferredSub: "load/native_fullstack_load.json"},
 		"container_contract": {schema: "tryops.native_container_contract.v1", preferredSub: "containers/native_container_contract_report.json"},
 		"quota_read_model":   {schema: "tryops.native_quota_read_model.v1", preferredSub: "quota/native_quota_read_model.json"},

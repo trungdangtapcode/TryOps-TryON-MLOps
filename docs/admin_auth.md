@@ -4,9 +4,12 @@ Date: 2026-06-11
 
 TryOps now includes a local least-privilege API-key simulation for admin actions.
 
-This is a control-plane contract, not a production secret system. Production deployments should
-replace it with OIDC, workload identity, or a dedicated secrets manager at the Rust gateway or
-platform-controller boundary.
+This is a control-plane contract, not a production identity provider. The production direction is
+OIDC/JWKS at the Rust gateway plus workload identity for runtime secrets. PA060 now adds a native
+secret-rotation contract in `native/go/tryops-secret-rotation-contract/`, Vault/External Secrets
+Kubernetes manifests under `infra/kubernetes/secret-management/`, and a hash-only API-key rotation
+policy in `configs/secret_rotation_policy.json`; it remains plan-mode evidence until exercised
+against a live Vault deployment.
 
 ## Protected Actions
 
@@ -49,3 +52,15 @@ The report verifies registry hygiene and least-privilege scenarios:
 - risk reviewer key can evaluate promotion but cannot create lineage
 - viewer key cannot evaluate promotion
 - missing key is rejected
+
+For rotation-plan evidence, run:
+
+```bash
+make native-secret-rotation-contract-sample
+```
+
+Artifact:
+
+```text
+artifacts/eval/secrets/native_secret_rotation_contract.json
+```

@@ -1603,3 +1603,27 @@ Date: 2026-06-11
 - Notes: this partially completes PA062. Local `production_ready=false` because `syft`, `trivy`, and
   `cosign` are not installed in this workspace; the GitHub workflow is ready to execute those tools
   in CI.
+
+## EXP-088: Native Secret Rotation And Workload Identity Contract
+
+- Command: `make native-secret-rotation-contract-test`; `make native-secret-rotation-contract-sample`;
+  `make native-evaluation-index-test evaluation-index-sample`
+- Workload: Vault-backed secret management, Kubernetes workload identity, and API-key rotation
+  contract validation for PA060
+- Evidence files:
+  - `configs/secret_rotation_policy.json`
+  - `infra/kubernetes/secret-management/vault-secretstore.yaml`
+  - `infra/kubernetes/secret-management/tryops-external-secrets.yaml`
+  - `.env.example`
+  - `native/go/tryops-secret-rotation-contract/`
+  - `artifacts/eval/secrets/native_secret_rotation_contract.json`
+  - `artifacts/eval/evaluation_index/evaluation_index.json`
+- Outcome: the split native Go verifier validates Vault KV provider settings, Kubernetes auth role,
+  SPIFFE-ready workload identity metadata, 90-day hash-only API-key rotation with 7-day overlap,
+  8 managed secrets, Compose secret mounts, live identity env knobs, External Secrets coverage,
+  `automountServiceAccountToken: false`, and a projected service-account token with `audience=vault`.
+  Latest local plan evidence passes 50/50 checks and is highlighted as `secret_rotation` by the
+  evaluation index.
+- Notes: this partially completes PA060. `production_ready=false` is intentional until a real
+  Vault/External Secrets deployment is available and `VAULT_ADDR` plus
+  `TRYOPS_WORKLOAD_IDENTITY_TOKEN_PATH` are exercised with a live secret fetch and rotation drill.

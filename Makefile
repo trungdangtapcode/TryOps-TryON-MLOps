@@ -19,6 +19,7 @@ VLLM_MODEL ?= HuggingFaceTB/SmolLM2-135M-Instruct
 .PHONY: native-observability-contract-build native-observability-contract-test native-observability-contract-sample
 .PHONY: native-alertmanager-contract-build native-alertmanager-contract-test native-alertmanager-contract-sample
 .PHONY: native-incident-workflow-build native-incident-workflow-test native-incident-workflow-sample
+.PHONY: native-secret-rotation-contract-build native-secret-rotation-contract-test native-secret-rotation-contract-sample
 .PHONY: native-db-migrator-build native-db-migrator-test native-db-migrator-sample native-db-migrator-apply
 .PHONY: native-backup-restore-build native-backup-restore-test native-backup-restore-sample native-backup-restore-live
 .PHONY: native-tls-cert-sample native-tls-contract-build native-tls-contract-test native-tls-contract-sample native-tls-smoke
@@ -30,7 +31,7 @@ web-typecheck:
 web-build:
 	cd web && npm ci && npm run build
 
-ci: test web-typecheck native-go-test native-rust-test native-cpp-test supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-incident-workflow-sample native-ci-contract-sample evaluation-index-sample
+ci: test web-typecheck native-go-test native-rust-test native-cpp-test supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-secret-rotation-contract-sample native-incident-workflow-sample native-ci-contract-sample evaluation-index-sample
 	docker compose config --quiet
 	docker compose --profile tls config --quiet
 
@@ -411,6 +412,7 @@ native-go-test:
 		cd $(CURDIR)/native/go/tryops-observability-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-alertmanager-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-incident-workflow && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd $(CURDIR)/native/go/tryops-secret-rotation-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-performance-budget && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-fullstack-load && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-ci-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
@@ -720,6 +722,21 @@ native-incident-workflow-test:
 native-incident-workflow-sample: native-incident-workflow-build rollback-sample
 	artifacts/native/tryops_incident_workflow --root . --output artifacts/eval/incidents/native_incident_workflow.json --postmortem-output artifacts/eval/incidents/postmortem_bad_candidate.md
 
+native-secret-rotation-contract-build:
+	mkdir -p artifacts/native
+	cd native/go/tryops-secret-rotation-contract && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_secret_rotation_contract .
+
+native-secret-rotation-contract-test:
+	@if command -v go >/dev/null 2>&1; then \
+		mkdir -p artifacts/.gocache; \
+		cd native/go/tryops-secret-rotation-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+	else \
+		echo "go not installed; skipping native secret rotation contract tests"; \
+	fi
+
+native-secret-rotation-contract-sample: native-secret-rotation-contract-build
+	artifacts/native/tryops_secret_rotation_contract --root . --output artifacts/eval/secrets/native_secret_rotation_contract.json
+
 native-db-migrator-build:
 	mkdir -p artifacts/native
 	cd native/go/tryops-db-migrator && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_db_migrator .
@@ -1015,7 +1032,7 @@ app-down:
 roadmap-status:
 	PYTHONPATH=$(PYTHONPATH) python scripts/roadmap_status.py MLOPS_VTON_LLM_ENTERPRISE_ROADMAP.md
 
-smoke: native-policy-sample native-vton-preprocess-sample native-image-metrics-sample native-perf-stats-sample native-burn-rate-build energy-demo-sample quota-sample native-quota-read-model-sample native-runtime-telemetry-sample native-observability-contract-sample native-alertmanager-contract-sample native-db-migrator-sample native-backup-restore-sample native-tls-contract-sample native-quota-ledger-smoke native-rust-test native-rust-smoke native-edge-cache-smoke native-edge-guardrail-smoke auth-sample supply-chain-sample model-supply-chain-sample finops-sample orchestration-sample vton-preprocess-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample native-trace-envelope-sample native-container-contract-sample test validate-sample deploy-package-sample signed-pr-promotion-sample registry-webhook-sample chaos-sample vton-compare-sample vton-advanced-eval-sample llm-benchmark-sample guardrail-sample native-guardrail-test native-go-test native-config-contract-test native-db-migrator-test native-backup-restore-test native-tls-contract-test native-performance-budget-test native-benchmark-test native-vllm-probe-test native-quantized-preflight-test native-job-runner-test native-slo-gate-test native-event-dispatcher-test native-demo-acceptance-test alert-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample slo-burn-rate-sample llm-sensitivity-sample llm-continuous-batching-sample native-eval-stats-build eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample governance-sample native-cpp-test native-gguf-preflight-test professor-demo-acceptance
+smoke: native-policy-sample native-vton-preprocess-sample native-image-metrics-sample native-perf-stats-sample native-burn-rate-build energy-demo-sample quota-sample native-quota-read-model-sample native-runtime-telemetry-sample native-observability-contract-sample native-alertmanager-contract-sample native-secret-rotation-contract-sample native-db-migrator-sample native-backup-restore-sample native-tls-contract-sample native-quota-ledger-smoke native-rust-test native-rust-smoke native-edge-cache-smoke native-edge-guardrail-smoke auth-sample supply-chain-sample model-supply-chain-sample finops-sample orchestration-sample vton-preprocess-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample native-trace-envelope-sample native-container-contract-sample test validate-sample deploy-package-sample signed-pr-promotion-sample registry-webhook-sample chaos-sample vton-compare-sample vton-advanced-eval-sample llm-benchmark-sample guardrail-sample native-guardrail-test native-go-test native-config-contract-test native-db-migrator-test native-backup-restore-test native-tls-contract-test native-performance-budget-test native-benchmark-test native-vllm-probe-test native-quantized-preflight-test native-job-runner-test native-slo-gate-test native-event-dispatcher-test native-demo-acceptance-test alert-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample slo-burn-rate-sample llm-sensitivity-sample llm-continuous-batching-sample native-eval-stats-build eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample governance-sample native-cpp-test native-gguf-preflight-test professor-demo-acceptance
 
 vton-real-sample: native-vton-preprocess-build native-image-metrics-build
 	PYTHONPATH=$(PYTHONPATH) python scripts/create_synthetic_vton_demo.py --output-dir artifacts/demo/vton

@@ -73,6 +73,9 @@ jobs:
       - name: Generate supply-chain and vulnerability evidence
         run: make supply-chain-sample vulnerability-scan-sample
 
+      - name: Generate secret rotation evidence
+        run: make native-secret-rotation-contract-sample
+
       - name: Generate incident workflow evidence
         run: make native-incident-workflow-sample
 

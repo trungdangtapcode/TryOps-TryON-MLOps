@@ -193,6 +193,47 @@ Current binary:
 artifacts/native/tryops_config_contract
 ```
 
+## Go Secret Rotation Contract Gate
+
+Path: `native/go/tryops-secret-rotation-contract`
+
+Purpose:
+
+- Validates the PA060 Vault/workload-identity and key-rotation plan from
+  `configs/secret_rotation_policy.json`.
+- Checks hash-only API-key registry storage, rotation/overlap windows, managed secret ownership,
+  Compose secret coverage, `.env.example` live identity variables, and Kubernetes manifests.
+- Parses Vault `SecretStore` and `ExternalSecret` YAML to prove External Secrets coverage for
+  runtime env vars without committing secret values.
+- Verifies a non-automounted `tryops-runtime` ServiceAccount plus projected service-account token
+  settings for Vault auth.
+- Emits `tryops.native_secret_rotation_contract.v1` for the Console evidence registry.
+
+Source layout:
+
+- `main.go`: thin CLI entrypoint.
+- `config.go`: root/policy/compose/env/output flags.
+- `files.go`: rooted JSON/YAML/text loading and report writing helpers.
+- `policy.go`: provider, workload identity, managed secret, and rotation-window checks.
+- `registry.go`: hash-only API-key registry and break-glass checks.
+- `compose.go`: Compose secret declarations, service mounts, and `.env.example` coverage.
+- `kubernetes.go`: Vault `SecretStore`, `ExternalSecret`, ServiceAccount, and projected-token checks.
+- `report.go`, `types.go`: evidence output and summary contracts.
+- `secret_rotation_test.go`: temp-root regression coverage for the contract and invalid key hashes.
+
+Verified commands:
+
+```bash
+make native-secret-rotation-contract-test
+make native-secret-rotation-contract-sample
+```
+
+Current binary:
+
+```text
+artifacts/native/tryops_secret_rotation_contract
+```
+
 ## Go Postgres Migration Gate
 
 Path: `native/go/tryops-db-migrator`

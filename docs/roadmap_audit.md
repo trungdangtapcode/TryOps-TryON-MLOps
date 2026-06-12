@@ -427,6 +427,12 @@ This verifies:
   checks across GitHub Actions OIDC/artifact permissions, language tests, Compose validation,
   seven-image Docker Buildx matrix, Syft SPDX SBOM generation, Trivy HIGH/CRITICAL scan gating,
   Cosign keyless signing, `make ci`, and referenced supply-chain/vulnerability/container reports.
+- Native Go secret-rotation/workload-identity contract evidence: `make native-secret-rotation-contract-sample`
+  writes `artifacts/eval/secrets/native_secret_rotation_contract.json` as
+  `tryops.native_secret_rotation_contract.v1`, proving 50/50 plan checks across Vault KV policy,
+  hash-only API-key registry rotation, `.env.example` live identity knobs, Compose secret mounts,
+  Kubernetes Vault `SecretStore`, `ExternalSecret` coverage for 8 managed secrets, a
+  non-automounted runtime ServiceAccount, and a projected service-account token for Vault auth.
 - Native Go optimization index and Console panel: `artifacts/eval/evaluation_index/evaluation_index.json`
   contains `optimization_panel` with the recommended LLM variant, leaderboard rank, Pareto-frontier
   state, per-variant VRAM/energy/SCI, and carbon-gate verdict; the React Evaluation view renders the
@@ -461,7 +467,11 @@ These remain intentionally unchecked because evidence is not strong enough yet:
 - Durable server-side async queue. The native Go job runner now proves deadline-bound client execution and polling, but the API-side VTON queue is still in-memory and is not a production queue.
 - External Alertmanager notification routing. Local Prometheus rules, Alertmanager page/ticket routing,
   inhibition, and the Go controller webhook are wired and validated; real pager/chat/ticket
-  credentials still need vault/workload-identity rotation under PA060.
+  credentials still need live vault/workload-identity rotation under PA060.
+- Live Vault secret retrieval and key rotation. PA060 now has native plan-mode evidence and
+  Kubernetes manifests, but `VAULT_ADDR` plus `TRYOPS_WORKLOAD_IDENTITY_TOKEN_PATH` have not been
+  exercised against a real Vault/External Secrets deployment, so `production_ready=false` is
+  intentional.
 - KServe/Kubeflow live deployment. The local Kubeflow-target orchestration skeleton exists, but there is no cluster execution or pipeline upload yet.
 - Live Syft/Trivy/Cosign execution in this workspace. The GitHub Actions workflow and native CI
   contract are wired, but local `production_ready=false` because Syft, Trivy, and Cosign are not

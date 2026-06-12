@@ -46,6 +46,8 @@ func summaryForReport(path string, data map[string]interface{}) []summaryItem {
 		return summaryBackupRestore(data)
 	case "tryops.native_tls_contract.v1":
 		return summaryTLSContract(data)
+	case "tryops.native_secret_rotation_contract.v1":
+		return summarySecretRotationContract(data)
 	case "tryops.native_fullstack_load.v1":
 		return summaryNativeFullstackLoad(data)
 	case "tryops.native_container_contract.v1":
@@ -423,6 +425,19 @@ func summaryAlertmanagerContract(data map[string]interface{}) []summaryItem {
 		{Label: "rules", Value: formatValue(summary["alert_rules"])},
 		{Label: "page receivers", Value: formatValue(summary["page_receivers"])},
 		{Label: "targets", Value: fmt.Sprintf("%d", len(arrayField(prometheus, "alertmanager_targets")))},
+	}
+}
+
+func summarySecretRotationContract(data map[string]interface{}) []summaryItem {
+	summary := objectField(data, "summary")
+	live := objectField(data, "live_readiness")
+	return []summaryItem{
+		{Label: "passed", Value: formatValue(data["passed"])},
+		{Label: "coverage", Value: stringField(data, "coverage_level")},
+		{Label: "production ready", Value: formatValue(data["production_ready"])},
+		{Label: "checks", Value: formatValue(summary["passed_checks"]) + "/" + formatValue(summary["total_checks"])},
+		{Label: "managed secrets", Value: formatValue(summary["managed_secrets"])},
+		{Label: "mode", Value: stringField(live, "mode")},
 	}
 }
 

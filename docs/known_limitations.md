@@ -1,8 +1,8 @@
 # Known Limitations
 
-- Rust gateway build/test/smoke now pass locally, but the gateway is still a local single-node
-  artifact rather than a hardened edge deployment with TLS, external auth, and distributed quota
-  counters.
+- Rust gateway build/test/smoke now pass locally, including native TLS smoke, but the gateway is
+  still a local single-node artifact rather than a hardened multi-node edge deployment with
+  external identity-provider federation and distributed quota admission validation.
 - Go is installed and the Go controller plus guardrail sidecar build and smoke locally.
 - The VTON and LLM model endpoints are still stubs.
 - Real datasets are not downloaded or committed.
@@ -33,7 +33,10 @@
 - Drift reports are generated from deterministic local sample windows, not live production request windows yet.
 - Chaos drills are deterministic local SLI-window injections, not live Kubernetes Chaos Mesh or
   LitmusChaos experiments yet.
-- Admin API-key authorization is a local least-privilege simulation with static demo keys, not production OIDC or workload identity.
+- Admin API-key authorization is a local least-privilege simulation with static demo keys. PA060 now
+  has native plan-mode evidence for hash-only API-key rotation, Vault/External Secrets manifests,
+  and Kubernetes workload identity, but production OIDC/JWKS plus live Vault secret fetch/rotation
+  still need to be exercised.
 - A local SPDX SBOM fallback is generated, `make vulnerability-scan-sample` runs the available `npm audit` check for `web/`, and `.github/workflows/ci.yml` plus `make native-ci-contract-sample` define the Syft/Trivy/Cosign production path, but Syft, Trivy, Grype, pip-audit, gitleaks, osv-scanner, and Cosign are not installed in this workspace.
 - Model provenance uses a local DSSE-shaped digest bundle verified by native C++; real Sigstore
   keyless OIDC identity and Rekor transparency-log proof are not generated locally yet.

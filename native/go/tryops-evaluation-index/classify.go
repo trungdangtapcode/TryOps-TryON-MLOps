@@ -33,7 +33,7 @@ func categoryForPath(path string, data map[string]interface{}) string {
 		return "sustainability"
 	case strings.Contains(path, "/drift/") || strings.Contains(path, "/slo/") || strings.Contains(path, "/load/") || strings.Contains(path, "/performance/") || strings.Contains(path, "/runtime/") || strings.Contains(path, "/trace_envelope/") || strings.Contains(path, "/observability/") || strings.Contains(path, "/alerts/") || strings.Contains(path, "/incidents/") || strings.Contains(schema, "drift") || strings.Contains(schema, "slo_gate") || strings.Contains(schema, "native_fullstack_load") || strings.Contains(schema, "performance_budget") || strings.Contains(schema, "runtime_telemetry") || strings.Contains(schema, "trace_envelope") || strings.Contains(schema, "observability_contract") || strings.Contains(schema, "alertmanager_contract") || strings.Contains(schema, "incident_workflow"):
 		return "monitoring"
-	case strings.Contains(path, "/config/") || strings.Contains(path, "/containers/") || strings.Contains(path, "/quota/") || strings.Contains(path, "/postgres/") || strings.Contains(path, "/backup/") || strings.Contains(path, "/tls/") || strings.Contains(schema, "config_contract") || strings.Contains(schema, "container_contract") || strings.Contains(schema, "quota_read_model") || strings.Contains(schema, "postgres_migration") || strings.Contains(schema, "backup_restore") || strings.Contains(schema, "tls_contract"):
+	case strings.Contains(path, "/config/") || strings.Contains(path, "/containers/") || strings.Contains(path, "/quota/") || strings.Contains(path, "/postgres/") || strings.Contains(path, "/backup/") || strings.Contains(path, "/tls/") || strings.Contains(path, "/secrets/") || strings.Contains(schema, "config_contract") || strings.Contains(schema, "container_contract") || strings.Contains(schema, "quota_read_model") || strings.Contains(schema, "postgres_migration") || strings.Contains(schema, "backup_restore") || strings.Contains(schema, "tls_contract") || strings.Contains(schema, "secret_rotation"):
 		return "platform"
 	case strings.Contains(path, "/data_versioning/") || strings.Contains(schema, "dvc_minio"):
 		return "platform"
@@ -95,6 +95,8 @@ func titleForPath(path string, data map[string]interface{}) string {
 		return "Native backup/restore drill"
 	case "tryops.native_tls_contract.v1":
 		return "Native TLS termination"
+	case "tryops.native_secret_rotation_contract.v1":
+		return "Native secret rotation contract"
 	case "tryops.native_fullstack_load.v1":
 		return "Native full-stack load SLO"
 	case "tryops.native_container_contract.v1":
