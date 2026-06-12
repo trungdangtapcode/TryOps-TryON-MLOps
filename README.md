@@ -124,15 +124,43 @@ make app-smoke
 
 ## What Runs Where
 
+`make app-up` uses Docker Compose port forwarding. It does not use nginx by default. The browser connects to a host port, Docker forwards that port into the container, and the Rust gateway serves the Console plus `/api/*`.
+
+| Service | Default URL or port | Override variable | Notes |
+| --- | --- | --- | --- |
+| TryOps Console + Rust gateway | `http://127.0.0.1:18081` | `TRYOPS_GATEWAY_PORT` | Main app URL. Use this first. |
+| FastAPI backend direct | `http://127.0.0.1:18080` | `TRYOPS_API_PORT` | Direct API/docs access. Gateway normally proxies this. |
+| Postgres | `127.0.0.1:15432` | `TRYOPS_POSTGRES_PORT` | Database for the full Compose stack. |
+| Valkey | `127.0.0.1:16379` | `TRYOPS_VALKEY_PORT` | Hot quota/rate counter store. |
+| MinIO API | `http://127.0.0.1:19000` | `TRYOPS_MINIO_PORT` | Object/artifact storage API. |
+| MinIO Console | `http://127.0.0.1:19001` | `TRYOPS_MINIO_CONSOLE_PORT` | Browser UI for MinIO. |
+| MLflow | `http://127.0.0.1:15000` | `TRYOPS_MLFLOW_PORT` | Experiment/model tracking. |
+| Prometheus | `http://127.0.0.1:19090` | `TRYOPS_PROMETHEUS_PORT` | Metrics database. |
+| Alertmanager | `http://127.0.0.1:19093` | `TRYOPS_ALERTMANAGER_PORT` | Alert routing. |
+| Grafana | `http://127.0.0.1:13000` | `TRYOPS_GRAFANA_PORT` | Dashboards. Default login is `admin` / `admin` on a fresh local volume. |
+| Go guardrail sidecar | `127.0.0.1:18093` | `TRYOPS_GUARDRAIL_PORT` | LLM guardrail service. Usually called by gateway/API. |
+| Manual FastAPI dev | `http://127.0.0.1:8080` | `--port` in the `uvicorn` command | Only for Option B. |
+| Vite frontend dev | `http://127.0.0.1:5173` | Vite auto-picks another port if busy | Only for Option B. |
+
+If a default port conflicts, override only the ports you need:
+
+```bash
+TRYOPS_GATEWAY_PORT=28081 \
+TRYOPS_API_PORT=28080 \
+TRYOPS_GRAFANA_PORT=23000 \
+make app-up
+```
+
+Then open the changed gateway URL:
+
 ```text
-http://127.0.0.1:18081  Full app through Rust gateway, from make app-up
-http://127.0.0.1:18080  FastAPI direct, from make app-up
-http://127.0.0.1:8080   FastAPI direct, from manual uvicorn dev command
-http://127.0.0.1:5173   Vite frontend dev server
-http://127.0.0.1:13000  Grafana, from make app-up
-http://127.0.0.1:19090  Prometheus, from make app-up
-http://127.0.0.1:15000  MLflow, from make app-up
-http://127.0.0.1:19001  MinIO Console, from make app-up
+http://127.0.0.1:28081
+```
+
+You can use the same override style for `make app-smoke`:
+
+```bash
+TRYOPS_GATEWAY_PORT=28081 TRYOPS_API_PORT=28080 make app-smoke
 ```
 
 ## Common Problems
@@ -209,7 +237,7 @@ Open these URLs:
 
 - Console through the Rust gateway: `http://127.0.0.1:18081`
 - FastAPI docs direct: `http://127.0.0.1:18080/api/docs`
-- Grafana: `http://127.0.0.1:13000`
+- Grafana: `http://127.0.0.1:13000` with default login `admin` / `admin`
 - Prometheus: `http://127.0.0.1:19090`
 - MLflow: `http://127.0.0.1:15000`
 - MinIO API: `http://127.0.0.1:19000`

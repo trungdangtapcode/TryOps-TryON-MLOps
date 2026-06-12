@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from tryops.native_safety import evaluate_with_native_safety
+
 
 GUARDRAIL_VERDICT_SCHEMA = "tryops.guardrail_verdict.v1"
 GUARDRAIL_REPORT_SCHEMA = "tryops.guardrail_report.v1"
@@ -112,7 +114,13 @@ def evaluate_ingress_guardrails(
         structured=structured,
         native_cli=native_cli,
     )
-    findings = _dedupe_findings(_pii_findings(redaction) + _native_findings(native, stage="ingress"))
+    native_safety = evaluate_with_native_safety(prompt)
+    native["content_safety"] = _content_safety_summary(native_safety)
+    findings = _dedupe_findings(
+        _pii_findings(redaction)
+        + _native_findings(native, stage="ingress")
+        + _native_safety_findings(native_safety)
+    )
     verdict = _build_verdict(
         stage="ingress",
         findings=findings,
@@ -400,6 +408,57 @@ def _native_findings(native: dict[str, Any], *, stage: str) -> list[dict[str, An
     return findings
 
 
+def _native_safety_findings(report: dict[str, Any]) -> list[dict[str, Any]]:
+    verdict = str(report.get("verdict", "allow"))
+    if verdict == "allow":
+        return []
+    action = "block" if verdict == "block" else "review"
+    severity = "high" if verdict == "block" else "medium"
+    categories = report.get("categories", {})
+    if not isinstance(categories, dict):
+        categories = {}
+    if int(report.get("exfiltration_hits", 0) or 0) > 0:
+        owasp_id = "LLM07:2025"
+        risk = "system_prompt_leakage"
+    elif int(report.get("injection_hits", 0) or 0) > 0:
+        owasp_id = "LLM01:2025"
+        risk = "prompt_injection"
+    else:
+        owasp_id = "LLM04:2025"
+        risk = "unsafe_content"
+    verb = "blocked" if verdict == "block" else "flagged"
+    message = (
+        "native content-safety gate "
+        f"{verb} prompt with risk_score={float(report.get('risk_score', 0.0) or 0.0):.4f} "
+        f"categories={dict(sorted(categories.items()))}"
+    )
+    return [
+        _finding(
+            check_id="native_content_safety",
+            owasp_id=owasp_id,
+            risk=risk,
+            stage="ingress",
+            action=action,
+            severity=severity,
+            message=message,
+        )
+    ]
+
+
+def _content_safety_summary(report: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": "tryops.native_safety.report.v1",
+        "available": report.get("engine") == "native",
+        "source": report.get("engine", "unknown"),
+        "verdict": report.get("verdict", "allow"),
+        "risk_score": report.get("risk_score", 0.0),
+        "injection_hits": report.get("injection_hits", 0),
+        "exfiltration_hits": report.get("exfiltration_hits", 0),
+        "toxicity_hits": report.get("toxicity_hits", 0),
+        "categories": report.get("categories", {}),
+    }
+
+
 def _build_verdict(
     *,
     stage: str,
@@ -424,6 +483,7 @@ def _build_verdict(
             "available": bool(native.get("available", False)),
             "source": native.get("source", "unknown"),
             "engine": native.get("engine", {"name": "tryops-python-guardrail", "language": "python", "version": "0.1.0"}),
+            "content_safety": native.get("content_safety", {}),
         },
         "control_map": _control_map(findings),
     }
@@ -437,6 +497,7 @@ def _control_map(findings: list[dict[str, Any]]) -> list[dict[str, str]]:
         ("LLM06:2025", "excessive_agency"): "no external-tool agency boundary",
         ("LLM07:2025", "system_prompt_leakage"): "system/developer prompt leakage block",
         ("LLM10:2025", "unbounded_consumption"): "unbounded-output and max-token guard",
+        ("LLM04:2025", "unsafe_content"): "native content-safety gate flags abusive or toxic prompts",
     }
     mapped = []
     for item in findings:

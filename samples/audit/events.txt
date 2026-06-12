@@ -1,0 +1,8 @@
+2026-06-12T09:14:22Z admission admit req=req-001 tenant=acme tokens=42
+2026-06-12T09:14:22Z redaction scrub req=req-001 categories=email,ipv4 count=2
+2026-06-12T09:14:23Z admission reject req=req-002 reason=rate_limited
+2026-06-12T09:14:23Z breaker trip window_error_rate=0.85 state=open
+2026-06-12T09:14:24Z breaker half_open probe req=req-050
+2026-06-12T09:14:24Z breaker recover state=closed
+2026-06-12T09:14:25Z policy promote model=tryops-llm version=1.4.0 stage=champion
+2026-06-12T09:14:25Z admission admit req=req-051 tenant=globex tokens=17

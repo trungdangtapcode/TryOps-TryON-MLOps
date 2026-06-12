@@ -6,7 +6,8 @@ This folder makes the project stronger than a Python-only ML demo.
 
 - Rust is the target production gateway language.
 - Go is the target Kubernetes/platform controller language.
-- C++ is used for hot metric, policy, preprocessing, energy, burn-rate, online experimentation and experiment statistics, chaos, model-artifact scan, and semantic-cache lookup paths.
+- C++ is used for hot metric, policy, preprocessing, energy, burn-rate, online experimentation and experiment statistics, chaos, model-artifact scan, semantic-cache lookup, admission control (rate limit + circuit breaker + bulkhead), PII/secret redaction, prompt/content-safety gating, tamper-evident audit-log, idempotency dedup (Bloom filter), cardinality estimation (HyperLogLog), LRU+TTL response cache, FinOps cost-attribution, and reservoir/priority trace sampling paths.
+- Go additionally provides the consistent-hash routing ring for sharding requests across backend replicas.
 - Go is used for platform/control-plane services and the deterministic LLM guardrail CLI.
 - Python remains the ML research, training, evaluation, and pipeline glue layer.
 
@@ -1278,4 +1279,184 @@ Current verified binary:
 
 ```text
 artifacts/native/tryops_vton_preprocess_cli
+```
+
+## C++ Admission Controller
+
+Path: `native/cpp/tryops_admission`
+
+Purpose: make the request-admission decision on the production boundary in a
+low-level language — a token bucket (rate limiting), a circuit breaker (fault
+isolation with half-open probing), and a concurrency bulkhead (load shedding) in
+one deterministic, replayable engine.
+
+Source layout:
+
+- `include/tryops_admission.hpp` / `src/tryops_admission.cpp`: the controller and
+  the `key=value` event-stream wire runner.
+- `src/tryops_admission_cli.cpp`: stdin wire → JSON report, with a `--max-shed-rate`
+  gate (exit 2 when the breaker is open or shedding too hard).
+
+Integration:
+
+- `src/tryops/native_admission.py` invokes the binary and carries a Python
+  reference reimplementation that agrees with the C++ engine bit-for-bit.
+- `scripts/evaluate_native_admission.py` cross-checks native vs reference counts.
+- `make native-admission-{build,sample,test}`; wired into `ci` and `smoke`.
+
+```text
+artifacts/native/tryops_admission_cli
+```
+
+## C++ PII / Secret Redaction Engine
+
+Path: `native/cpp/tryops_redaction`
+
+Purpose: scrub secrets and PII (email, Luhn-validated credit cards, API/AWS/GitHub
+keys, bearer/JWT tokens, IPv4, SSN, phone) out of free text *before* it is logged,
+cached, or persisted — on the hot path, in C++. Emits per-category counts plus
+FNV-1a input/output fingerprints for audit.
+
+- `src/tryops/native_redaction.py` mirrors the detectors; native and reference
+  agree on counts, redacted body, and fingerprints.
+- `make native-redaction-{build,sample,test}`; wired into `ci` and `smoke`.
+
+```text
+artifacts/native/tryops_redaction_cli
+```
+
+## C++ Content-Safety Gate
+
+Path: `native/cpp/tryops_safety`
+
+Purpose: block or flag prompt-injection, system-prompt exfiltration, and abusive
+content before the request reaches LLM generation. The gate is deterministic,
+dependency-free, and cheap enough for the request boundary; it complements the Go
+LLM guardrail sidecar and can be replaced or augmented by Llama Guard-style model
+classifiers later.
+
+- `src/tryops/native_safety.py` mirrors the C++ rule set and scoring.
+- `scripts/evaluate_native_safety.py` runs labeled prompt fixtures and fails the
+  evidence gate if native/reference parity or label accuracy regresses.
+- `src/tryops/guardrails.py` includes the native safety verdict in
+  `native_engine.content_safety` and turns flag/block results into ingress
+  guardrail findings.
+- `make native-safety-{build,sample,test}`; wired into `ci` and `smoke`.
+
+```text
+artifacts/native/tryops_safety_cli
+```
+
+## C++ Tamper-Evident Audit Log
+
+Path: `native/cpp/tryops_audit_log`
+
+Purpose: an append-only, hash-chained ledger with a SHA-256 Merkle tree over all
+entries. Tampering with any past record changes the Merkle root and breaks the
+chain; O(log n) inclusion proofs let a verifier confirm membership against a
+published root. SHA-256 is implemented from scratch (no deps) and verified
+bit-for-bit against Python `hashlib`, including FIPS-180-4 KAT vectors.
+
+- `src/tryops/native_audit_log.py` provides the `hashlib`-based reference.
+- `scripts/evaluate_native_audit_log.py` emits root + inclusion proof and
+  demonstrates tamper detection.
+- `make native-audit-log-{build,sample,test}`; wired into `ci` and `smoke`.
+
+```text
+artifacts/native/tryops_audit_log_cli
+```
+
+## C++ Idempotency Dedup (Bloom Filter)
+
+Path: `native/cpp/tryops_dedup`
+
+Purpose: reject replayed idempotency keys at the boundary without a database
+round-trip. A Bloom filter sized from (expected items, target false-positive
+rate) using Kirsch-Mitzenmacher double hashing — zero false negatives, fixed tiny
+memory. Sample: 600 requests → 400 unique admitted / 200 replays rejected.
+
+- `src/tryops/native_dedup.py` reproduces the FNV-1a double-hashing + optimal
+  sizing exactly; native and reference agree bit-for-bit on admit/reject.
+- `make native-dedup-{build,sample,test}`; wired into `ci` and `smoke`.
+
+```text
+artifacts/native/tryops_dedup_cli
+```
+
+## C++ HyperLogLog Cardinality
+
+Path: `native/cpp/tryops_hll`
+
+Purpose: estimate distinct counts (unique users/prompts/error fingerprints) over
+a high-volume stream in O(2^p) bytes instead of storing every key. Standard HLL
+estimator with FNV-1a+fmix64 hashing and HLL++ linear-counting small-range
+correction. Sample: 8000 distinct from 24k observations estimated at 8020
+(0.26% error) in 16 KB of state.
+
+- `src/tryops/native_hll.py` replicates the hash + estimator; an estimate match
+  proves identical register state (hence identical hashing) across C++/Python.
+- `make native-hll-{build,sample,test}`; wired into `ci` and `smoke`.
+
+```text
+artifacts/native/tryops_hll_cli
+```
+
+## C++ LRU+TTL Response Cache
+
+Path: `native/cpp/tryops_cache`
+
+Purpose: short-circuit repeated identical requests at the edge with a fixed-
+capacity LRU cache plus per-entry sliding TTL (O(1) hash map + intrusive list).
+Zipfian sample: 77.6% hit rate at 256 entries over an 800-key space, 866
+evictions. `src/tryops/native_cache.py` reproduces the eviction/expiry semantics
+exactly (native == reference). `make native-cache-{build,sample,test}`.
+
+```text
+artifacts/native/tryops_cache_cli
+```
+
+## C++ Cost-Attribution (FinOps Showback)
+
+Path: `native/cpp/tryops_cost`
+
+Purpose: turn a per-request usage stream (tokens, GPU-seconds, energy) into
+auditable per-tenant / per-model cost + carbon breakdowns. Pricing is consistent
+with the green-MLOps methodology (GPU $/hr, $/kWh, grid gCO2e/kWh). Sample: 2000
+requests → $79.37 total / 392 g CO2e across 4 tenants. `src/tryops/native_cost.py`
+mirrors the arithmetic (native == reference). `make native-cost-{build,sample,test}`.
+
+```text
+artifacts/native/tryops_cost_cli
+```
+
+## C++ Trace Sampler (Reservoir + Priority)
+
+Path: `native/cpp/tryops_sampler`
+
+Purpose: keep a bounded, representative sample of a high-volume trace stream so
+observability stays affordable. Reservoir mode (Algorithm R) gives every span an
+equal k/n keep-probability in one pass with O(k) memory; priority mode force-keeps
+flagged spans (errors/slow requests) and fills the rest uniformly. A shared
+deterministic xorshift64* RNG makes selection reproducible, so the C++ engine and
+`src/tryops/native_sampler.py` agree bit-for-bit (including randomized picks).
+`make native-sampler-{build,sample,test}`.
+
+```text
+artifacts/native/tryops_sampler_cli
+```
+
+## C++ Retry Policy (Backoff + Jitter + Budget)
+
+Path: `native/cpp/tryops_retry`
+
+Purpose: model the boundary's retry behaviour — exponential backoff with jitter
+(full/equal/none, the AWS/SRE pattern) bounded by a cumulative retry budget
+(gRPC-style throttle) so a wave of failures can't trigger a retry storm that
+amplifies load on a struggling backend. Shared xorshift64 RNG makes jittered
+delays reproducible, so `src/tryops/native_retry.py` agrees with the binary on
+outcomes *and* the accumulated backoff. Sample: 71.2%→89.3% success with 206
+retries denied by budget. `make native-retry-{build,sample,test}`.
+
+```text
+artifacts/native/tryops_retry_cli
 ```
