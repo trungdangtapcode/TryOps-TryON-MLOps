@@ -61,7 +61,7 @@ Terminal 1, start the backend with the simple SQLite database:
 cd /home/tcuong1000/flow
 python -m pip install -e ".[dev]"
 make db-init
-PYTHONPATH=src python -m uvicorn tryops.api:create_app --factory --host 0.0.0.0 --port 8080
+PYTHONPATH=src python -m uvicorn tryops.api:create_app --factory --host 0.0.0.0 --port 18180
 ```
 
 Leave Terminal 1 running.
@@ -71,13 +71,13 @@ Terminal 2, start the frontend and point it at the backend:
 ```bash
 cd /home/tcuong1000/flow
 npm --prefix web ci
-VITE_TRYOPS_API_BASE=http://127.0.0.1:8080 npm --prefix web run dev
+VITE_TRYOPS_API_BASE=http://127.0.0.1:18180 npm --prefix web run dev
 ```
 
 Open:
 
 ```text
-http://127.0.0.1:5173
+http://127.0.0.1:15173
 ```
 
 Use this API key in the Console:
@@ -97,9 +97,9 @@ artifacts/app/tryops.db
 Quick backend checks:
 
 ```bash
-curl -fsS http://127.0.0.1:8080/api/health
-curl -fsS "http://127.0.0.1:8080/api/auth/session?api_key=tryops-viewer-demo-key"
-curl -fsS "http://127.0.0.1:8080/api/dashboard?api_key=tryops-viewer-demo-key"
+curl -fsS http://127.0.0.1:18180/api/health
+curl -fsS "http://127.0.0.1:18180/api/auth/session?api_key=tryops-viewer-demo-key"
+curl -fsS "http://127.0.0.1:18180/api/dashboard?api_key=tryops-viewer-demo-key"
 ```
 
 ### Which Option Should I Use?
@@ -113,7 +113,7 @@ Option A: make app-up
 Use this while changing React code:
 
 ```text
-Option B: FastAPI on 8080 + Vite on 5173
+Option B: FastAPI on 18180 + Vite on 15173
 ```
 
 Use this to prove the stack works automatically:
@@ -139,8 +139,8 @@ make app-smoke
 | Alertmanager | `http://127.0.0.1:19093` | `TRYOPS_ALERTMANAGER_PORT` | Alert routing. |
 | Grafana | `http://127.0.0.1:13000` | `TRYOPS_GRAFANA_PORT` | Dashboards. Default login is `admin` / `admin` on a fresh local volume. |
 | Go guardrail sidecar | `127.0.0.1:18093` | `TRYOPS_GUARDRAIL_PORT` | LLM guardrail service. Usually called by gateway/API. |
-| Manual FastAPI dev | `http://127.0.0.1:8080` | `--port` in the `uvicorn` command | Only for Option B. |
-| Vite frontend dev | `http://127.0.0.1:5173` | Vite auto-picks another port if busy | Only for Option B. |
+| Manual FastAPI dev | `http://127.0.0.1:18180` | `--port` in the `uvicorn` command | Only for Option B. |
+| Vite frontend dev | `http://127.0.0.1:15173` | `npm --prefix web run dev` uses this port; Vite auto-picks another port if busy. | Only for Option B. |
 
 If a default port conflicts, override only the ports you need:
 
@@ -168,16 +168,16 @@ TRYOPS_GATEWAY_PORT=28081 TRYOPS_API_PORT=28080 make app-smoke
 If the frontend opens but data does not load, restart frontend like this:
 
 ```bash
-VITE_TRYOPS_API_BASE=http://127.0.0.1:8080 npm --prefix web run dev
+VITE_TRYOPS_API_BASE=http://127.0.0.1:18180 npm --prefix web run dev
 ```
 
-If port `5173` is busy, Vite will print another URL. Open the URL Vite prints.
+If port `15173` is busy, Vite will print another URL. Open the URL Vite prints.
 
-If port `8080` is busy, run FastAPI on another port and match the frontend env var:
+If port `18180` is busy, run FastAPI on another port and match the frontend env var:
 
 ```bash
-PYTHONPATH=src python -m uvicorn tryops.api:create_app --factory --host 0.0.0.0 --port 8082
-VITE_TRYOPS_API_BASE=http://127.0.0.1:8082 npm --prefix web run dev
+PYTHONPATH=src python -m uvicorn tryops.api:create_app --factory --host 0.0.0.0 --port 18182
+VITE_TRYOPS_API_BASE=http://127.0.0.1:18182 npm --prefix web run dev
 ```
 
 If Docker services are confusing or stale, reset the full stack:
@@ -307,7 +307,7 @@ Terminal 1, initialize the zero-config local SQLite database and start FastAPI:
 
 ```bash
 make db-init
-PYTHONPATH=src python -m uvicorn tryops.api:create_app --factory --host 0.0.0.0 --port 8080
+PYTHONPATH=src python -m uvicorn tryops.api:create_app --factory --host 0.0.0.0 --port 18180
 ```
 
 The SQLite file is created at `artifacts/app/tryops.db`.
@@ -315,19 +315,19 @@ The SQLite file is created at `artifacts/app/tryops.db`.
 Terminal 2, start the React Console with the backend URL:
 
 ```bash
-VITE_TRYOPS_API_BASE=http://127.0.0.1:8080 npm --prefix web run dev
+VITE_TRYOPS_API_BASE=http://127.0.0.1:18180 npm --prefix web run dev
 ```
 
-Open `http://127.0.0.1:5173`.
+Open `http://127.0.0.1:15173`.
 
-If you already ran `npm --prefix web run dev` without `VITE_TRYOPS_API_BASE`, stop it with `Ctrl-C` and restart it with the command above. The Console needs that env var when FastAPI is running separately on port `8080`.
+If you already ran `npm --prefix web run dev` without `VITE_TRYOPS_API_BASE`, stop it with `Ctrl-C` and restart it with the command above. The Console needs that env var when FastAPI is running separately on port `18180`.
 
 Quick backend checks:
 
 ```bash
-curl -fsS http://127.0.0.1:8080/api/health
-curl -fsS "http://127.0.0.1:8080/api/auth/session?api_key=tryops-viewer-demo-key"
-curl -fsS "http://127.0.0.1:8080/api/dashboard?api_key=tryops-viewer-demo-key"
+curl -fsS http://127.0.0.1:18180/api/health
+curl -fsS "http://127.0.0.1:18180/api/auth/session?api_key=tryops-viewer-demo-key"
+curl -fsS "http://127.0.0.1:18180/api/dashboard?api_key=tryops-viewer-demo-key"
 ```
 
 Use the full Postgres-backed local stack instead of SQLite:
