@@ -1075,7 +1075,7 @@ Items list the **data source that powers them** so each is a thin view, not new 
 - [x] L017 Add future work for scaling to real enterprise deployment. (`reports/final_report.md` §19; Wave 2 themes M–U.)
 - [x] L018 Create final presentation slides. (`docs/presentation_outline.md`: 15-slide sequence + demo scripts.)
 - [x] L019 Create defense Q&A with tough questions and concise answers. (`docs/defense_qa.md`.)
-- [ ] L020 Freeze final release artifacts and tag the project state. (Blocked: workspace git repository is currently not initialized.)
+- [ ] L020 Freeze final release artifacts and tag the project state. (Repository is initialized and pushed; final release freeze/tag remains until the product-ready gate is complete.)
 
 ## Weekly Execution Rhythm
 
