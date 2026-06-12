@@ -18,6 +18,7 @@ security-events: write
 actions/setup-python@v5
 actions/setup-go@v5
 actions/setup-node@v4
+python -m pip install -e ".[dev]"
 make test
 make web-typecheck web-build
 make native-go-test
@@ -51,6 +52,7 @@ output-file: artifacts/eval/ci/sbom/
 aquasecurity/trivy-action@
 scanners: vuln,secret,misconfig
 severity: HIGH,CRITICAL
+limit-severities-for-sarif: true
 exit-code: "1"
 sigstore/cosign-installer@
 cosign sign --yes
@@ -77,6 +79,7 @@ security-events: write
 actions/setup-python@v5
 actions/setup-go@v5
 actions/setup-node@v4
+python -m pip install -e ".[dev]"
 make test
 make web-typecheck web-build
 make native-go-test
@@ -110,6 +113,7 @@ output-file: artifacts/eval/ci/sbom/
 aquasecurity/trivy-action@
 scanners: vuln,secret,misconfig
 severity: HIGH,CRITICAL
+limit-severities-for-sarif: true
 exit-code: "1"
 sigstore/cosign-installer@
 cosign sign --yes
@@ -164,6 +168,7 @@ security-events: write
 actions/setup-python@v5
 actions/setup-go@v5
 actions/setup-node@v4
+python -m pip install -e ".[dev]"
 make test
 make web-typecheck web-build
 make native-go-test
@@ -197,6 +202,7 @@ output-file: artifacts/eval/ci/sbom/
 aquasecurity/trivy-action@
 scanners: vuln,secret,misconfig
 severity: HIGH,CRITICAL
+limit-severities-for-sarif: true
 exit-code: "1"
 sigstore/cosign-installer@
 cosign sign --yes

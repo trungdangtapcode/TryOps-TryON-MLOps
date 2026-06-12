@@ -47,7 +47,7 @@ jobs:
           cache-dependency-path: web/package-lock.json
 
       - name: Install Python package
-        run: python -m pip install -e .
+        run: python -m pip install -e ".[dev]"
 
       - name: Run Python contracts
         run: make test
@@ -165,6 +165,7 @@ jobs:
           scanners: vuln,secret,misconfig
           vuln-type: os,library
           severity: HIGH,CRITICAL
+          limit-severities-for-sarif: true
           ignore-unfixed: true
           format: sarif
           output: artifacts/eval/ci/trivy/${{ matrix.image.role }}.sarif
