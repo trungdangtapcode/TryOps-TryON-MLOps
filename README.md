@@ -31,6 +31,8 @@ Wait until the command finishes. Then open:
 http://127.0.0.1:18081
 ```
 
+In Option A, `http://127.0.0.1:15173` is not used. That port only works in Option B after you start Vite with `npm --prefix web run dev`.
+
 Use this API key in the Console:
 
 ```text
@@ -140,7 +142,7 @@ make app-smoke
 | Grafana | `http://127.0.0.1:13000` | `TRYOPS_GRAFANA_PORT` | Dashboards. Default login is `admin` / `admin` on a fresh local volume. |
 | Go guardrail sidecar | `127.0.0.1:18093` | `TRYOPS_GUARDRAIL_PORT` | LLM guardrail service. Usually called by gateway/API. |
 | Manual FastAPI dev | `http://127.0.0.1:18180` | `--port` in the `uvicorn` command | Only for Option B. |
-| Vite frontend dev | `http://127.0.0.1:15173` | `npm --prefix web run dev` uses this port; Vite auto-picks another port if busy. | Only for Option B. |
+| Vite frontend dev | `http://127.0.0.1:15173` | `npm --prefix web run dev` uses this port; Vite auto-picks another port if busy. | Only for Option B. `make app-up` does not start this server. |
 
 If a default port conflicts, override only the ports you need:
 
@@ -170,6 +172,8 @@ If the frontend opens but data does not load, restart frontend like this:
 ```bash
 VITE_TRYOPS_API_BASE=http://127.0.0.1:18180 npm --prefix web run dev
 ```
+
+If `curl http://127.0.0.1:15173/` fails after `make app-up`, that is expected. Use `http://127.0.0.1:18081` for Option A, or start Vite separately for Option B.
 
 If port `15173` is busy, Vite will print another URL. Open the URL Vite prints.
 
