@@ -54,6 +54,8 @@ func summaryForReport(path string, data map[string]interface{}) []summaryItem {
 		return summaryNativeFullstackLoad(data)
 	case "tryops.native_container_contract.v1":
 		return summaryContainerContract(data)
+	case "tryops.distributed_quota_admission.v1":
+		return summaryDistributedQuota(data)
 	case "tryops.native_quota_read_model.v1":
 		return summaryQuotaReadModel(data)
 	case "tryops.native_performance_budget.v1":
@@ -364,6 +366,18 @@ func summaryContainerContract(data map[string]interface{}) []summaryItem {
 		{Label: "go", Value: formatValue(byRuntime["go"])},
 		{Label: "rust", Value: formatValue(byRuntime["rust"])},
 		{Label: "cpp", Value: formatValue(byRuntime["cpp"])},
+	}
+}
+
+func summaryDistributedQuota(data map[string]interface{}) []summaryItem {
+	summary := objectField(data, "summary")
+	return []summaryItem{
+		{Label: "passed", Value: formatValue(data["passed"])},
+		{Label: "coverage", Value: stringField(data, "coverage_level")},
+		{Label: "gateways", Value: formatValue(summary["gateways"])},
+		{Label: "allowed", Value: formatValue(summary["allowed"]) + "/" + formatValue(summary["expected_allowed"])},
+		{Label: "rejected", Value: formatValue(summary["rejected"])},
+		{Label: "errors", Value: formatValue(summary["errors"])},
 	}
 }
 

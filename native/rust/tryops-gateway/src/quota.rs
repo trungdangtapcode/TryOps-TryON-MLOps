@@ -11,15 +11,15 @@ use crate::quota_snapshot::{build_tenant_snapshots, QuotaTenantSnapshot};
 
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct QuotaCheckRequest {
-    user_id: String,
-    plan: String,
-    workload: String,
+    pub(crate) user_id: String,
+    pub(crate) plan: String,
+    pub(crate) workload: String,
     #[serde(default = "default_request_units")]
-    request_units: u64,
+    pub(crate) request_units: u64,
     #[serde(default)]
-    estimated_tokens: u64,
+    pub(crate) estimated_tokens: u64,
     #[serde(default)]
-    period: Option<String>,
+    pub(crate) period: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -45,6 +45,33 @@ pub(crate) struct QuotaDecision {
     pub(crate) workload: String,
     pub(crate) checks: Vec<QuotaDimensionCheck>,
     reason: &'static str,
+}
+
+impl QuotaDecision {
+    pub(crate) fn new(
+        allowed: bool,
+        period: String,
+        user_hash: String,
+        plan: String,
+        workload: String,
+        checks: Vec<QuotaDimensionCheck>,
+    ) -> Self {
+        Self {
+            schema_version: "tryops.quota_decision.v1",
+            engine: "native_rust_gateway",
+            allowed,
+            period,
+            user_hash,
+            plan,
+            workload,
+            checks,
+            reason: if allowed {
+                "within_quota"
+            } else {
+                "quota_exceeded"
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -162,21 +189,27 @@ impl QuotaLedger {
             }
         }
 
-        Ok(QuotaDecision {
-            schema_version: "tryops.quota_decision.v1",
-            engine: "native_rust_gateway",
+        Ok(QuotaDecision::new(
             allowed,
             period,
             user_hash,
-            plan: request.plan,
-            workload: request.workload,
-            checks: checks.into_iter().map(|(_, check)| check).collect(),
-            reason: if allowed {
-                "within_quota"
-            } else {
-                "quota_exceeded"
-            },
-        })
+            request.plan,
+            request.workload,
+            checks.into_iter().map(|(_, check)| check).collect(),
+        ))
+    }
+
+    pub(crate) fn apply_decision_snapshot(&mut self, decision: &QuotaDecision) {
+        for check in &decision.checks {
+            self.usage.insert(
+                (
+                    decision.period.clone(),
+                    decision.user_hash.clone(),
+                    check.dimension.clone(),
+                ),
+                check.used_after,
+            );
+        }
     }
 
     pub(crate) fn snapshot(&self) -> QuotaSnapshot {
@@ -264,7 +297,9 @@ fn default_request_units() -> u64 {
     1
 }
 
-fn usage_dimensions(request: &QuotaCheckRequest) -> Result<Vec<(&'static str, u64)>, String> {
+pub(crate) fn usage_dimensions(
+    request: &QuotaCheckRequest,
+) -> Result<Vec<(&'static str, u64)>, String> {
     match request.workload.as_str() {
         "llm" => Ok(vec![
             ("llm_requests_per_day", request.request_units),
@@ -275,7 +310,7 @@ fn usage_dimensions(request: &QuotaCheckRequest) -> Result<Vec<(&'static str, u6
     }
 }
 
-fn dimension_limit(plan: &str, dimension: &str) -> Option<u64> {
+pub(crate) fn dimension_limit(plan: &str, dimension: &str) -> Option<u64> {
     plan_limits(plan).and_then(|limits| {
         limits
             .iter()
@@ -305,7 +340,7 @@ fn plan_limits(plan: &str) -> Option<&'static [(&'static str, u64)]> {
     }
 }
 
-fn current_period_key() -> String {
+pub(crate) fn current_period_key() -> String {
     let seconds = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()

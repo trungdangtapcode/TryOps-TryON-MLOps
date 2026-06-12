@@ -87,6 +87,7 @@ func selectHighlights(reports []artifactReport) map[string]artifactReport {
 		"secret_rotation":    {schema: "tryops.native_secret_rotation_contract.v1", preferredSub: "secrets/native_secret_rotation_contract.json"},
 		"fullstack_load":     {schema: "tryops.native_fullstack_load.v1", preferredSub: "load/native_fullstack_load.json"},
 		"container_contract": {schema: "tryops.native_container_contract.v1", preferredSub: "containers/native_container_contract_report.json"},
+		"distributed_quota":  {schema: "tryops.distributed_quota_admission.v1", preferredSub: "quota/native_distributed_quota_admission.json"},
 		"quota_read_model":   {schema: "tryops.native_quota_read_model.v1", preferredSub: "quota/native_quota_read_model.json"},
 		"runtime_telemetry":  {schema: "tryops.native_runtime_telemetry.v1", preferredSub: "runtime/native_runtime_telemetry.json"},
 		"trace_envelope":     {schema: "tryops.native_trace_envelope.v1", preferredSub: "trace_envelope/native_trace_envelope_report.json"},

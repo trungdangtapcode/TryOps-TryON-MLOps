@@ -7,6 +7,14 @@ pub(crate) fn env_u64(name: &str, default_value: u64) -> u64 {
         .unwrap_or(default_value)
 }
 
+pub(crate) fn env_bool(name: &str, default_value: bool) -> bool {
+    env::var(name)
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .map(|value| matches!(value.as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(default_value)
+}
+
 pub(crate) fn optional_env(name: &str) -> Option<String> {
     env::var(name)
         .ok()

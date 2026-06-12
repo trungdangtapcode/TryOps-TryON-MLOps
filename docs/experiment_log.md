@@ -1686,5 +1686,28 @@ Date: 2026-06-11
 - Notes: this closes PA072-PA086 for local/native P8 evidence. The final smoke passed 18/18
   full-stack checks and then passed both native job-runner jobs through the Rust gateway. Live Vault
   secret fetch/rotation, live Syft/Trivy/Cosign execution, external k6/locust confirmation,
-  external error-tracker DSN exercise, live OTLP exporters, and distributed quota validation remain
-  production-profile work rather than local P8 gaps.
+  external error-tracker DSN exercise, and live OTLP exporters remain production-profile work
+  rather than local P8 gaps; distributed quota validation is closed separately in EXP-091.
+
+## EXP-091: Distributed Native Quota Admission
+
+- Command: `make native-distributed-quota-test`; `make native-rust-test`;
+  `make native-distributed-quota-smoke`; `make native-evaluation-index-test evaluation-index-sample`
+- Workload: Multi-gateway quota admission using Postgres as the shared authoritative ledger
+- Evidence files:
+  - `native/rust/tryops-gateway/src/quota.rs`
+  - `native/rust/tryops-gateway/src/quota_durable.rs`
+  - `native/rust/tryops-gateway/src/handlers.rs`
+  - `native/go/tryops-distributed-quota/`
+  - `artifacts/eval/quota/native_distributed_quota_admission.json`
+  - `artifacts/eval/evaluation_index/evaluation_index.json`
+- Outcome: the first live smoke exposed an oversell risk: with one gateway falling back to local
+  admission, 32/32 concurrent requests were allowed against a 20-request free-plan cap. The gateway
+  now fails closed when `TRYOPS_GATEWAY_QUOTA_POSTGRES_ADMISSION=true` but Postgres admission is not
+  active. When active, it uses a Postgres transaction and `SELECT ... FOR UPDATE` row locks across
+  quota dimensions, then mirrors accepted decisions to Valkey if configured. The final live smoke
+  started disposable Postgres plus two Rust gateway processes and passed with exactly 20/32 allowed,
+  12 rejected, zero request errors, and `no_cluster_quota_oversell=true`.
+- Notes: this closes the local distributed multi-gateway quota validation gap for P6/P8. Production
+  still needs the broader live Vault rotation, live Syft/Trivy/Cosign, external k6/locust, external
+  error-tracker DSN, and live OTLP exporter exercises.

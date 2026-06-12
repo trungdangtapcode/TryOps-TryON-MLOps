@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     auth::AuthPreflight,
-    config::{env_u64, optional_env},
+    config::{env_bool, env_u64, optional_env},
     metrics::MetricsLedger,
     quota::QuotaLedger,
     quota_durable::QuotaDurableStore,
@@ -24,6 +24,7 @@ pub(crate) struct AppState {
     pub(crate) auth: AuthPreflight,
     pub(crate) quota_store: Option<QuotaLedgerStore>,
     pub(crate) quota_durable: Option<QuotaDurableStore>,
+    pub(crate) quota_postgres_admission: bool,
     pub(crate) proxy_client: reqwest::Client,
     pub(crate) upstream_base: String,
     pub(crate) guardrail_url: Option<String>,
@@ -68,6 +69,7 @@ impl AppState {
             auth: AuthPreflight::from_env(),
             quota_store,
             quota_durable,
+            quota_postgres_admission: env_bool("TRYOPS_GATEWAY_QUOTA_POSTGRES_ADMISSION", false),
             proxy_client: reqwest::Client::new(),
             upstream_base: env::var("TRYOPS_GATEWAY_UPSTREAM")
                 .unwrap_or_else(|_| "http://127.0.0.1:8080".to_string()),
@@ -94,6 +96,7 @@ pub(crate) fn test_state(guardrail_url: Option<String>) -> Arc<AppState> {
         auth: AuthPreflight::default(),
         quota_store: None,
         quota_durable: None,
+        quota_postgres_admission: false,
         proxy_client: reqwest::Client::new(),
         upstream_base: "http://127.0.0.1:8080".to_string(),
         guardrail_url,

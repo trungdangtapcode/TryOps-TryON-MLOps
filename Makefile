@@ -14,6 +14,7 @@ VLLM_MODEL ?= HuggingFaceTB/SmolLM2-135M-Instruct
 .PHONY: native-gguf-preflight-build native-gguf-preflight-test llm-gguf-preflight-sample
 .PHONY: native-trace-envelope-cpp-build native-trace-envelope-cpp-test native-trace-envelope-build native-trace-envelope-test native-trace-envelope-sample
 .PHONY: native-container-contract-build native-container-contract-test native-container-contract-sample
+.PHONY: native-distributed-quota-build native-distributed-quota-test native-distributed-quota-smoke
 .PHONY: native-quota-read-model-build native-quota-read-model-test native-quota-read-model-sample
 .PHONY: native-runtime-telemetry-build native-runtime-telemetry-test native-runtime-telemetry-sample
 .PHONY: native-observability-contract-build native-observability-contract-test native-observability-contract-sample
@@ -408,6 +409,7 @@ native-go-test:
 		cd $(CURDIR)/native/go/tryops-backup-restore && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-tls-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-container-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+		cd $(CURDIR)/native/go/tryops-distributed-quota && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-quota-read-model && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-runtime-telemetry && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
 		cd $(CURDIR)/native/go/tryops-observability-contract && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
@@ -646,6 +648,55 @@ native-container-contract-test:
 
 native-container-contract-sample: native-container-contract-build
 	artifacts/native/tryops_container_contract --root . --manifest configs/container_images.json --compose docker-compose.yml --output artifacts/eval/containers/native_container_contract_report.json
+
+native-distributed-quota-build:
+	mkdir -p artifacts/native
+	cd native/go/tryops-distributed-quota && GOFLAGS=-mod=mod go build -buildvcs=false -o ../../../artifacts/native/tryops_distributed_quota .
+
+native-distributed-quota-test:
+	@if command -v go >/dev/null 2>&1; then \
+		mkdir -p artifacts/.gocache; \
+		cd native/go/tryops-distributed-quota && GOCACHE=$(CURDIR)/artifacts/.gocache GOFLAGS=-mod=mod go test ./...; \
+	else \
+		echo "go not installed; skipping native distributed quota tests"; \
+	fi
+
+native-distributed-quota-smoke: native-rust-build native-distributed-quota-build
+	@set -eu; \
+	mkdir -p artifacts/eval/quota artifacts/native; \
+	project=tryops_quota_dist; \
+	pg_port=$${TRYOPS_DISTRIBUTED_QUOTA_POSTGRES_PORT:-15435}; \
+	pg_password=$${TRYOPS_POSTGRES_PASSWORD:-tryops-local-postgres}; \
+	pid1=""; pid2=""; \
+	cleanup() { \
+		if [ -n "$$pid1" ]; then kill "$$pid1" 2>/dev/null || true; fi; \
+		if [ -n "$$pid2" ]; then kill "$$pid2" 2>/dev/null || true; fi; \
+		COMPOSE_PROJECT_NAME=$$project TRYOPS_POSTGRES_PORT=$$pg_port TRYOPS_POSTGRES_PASSWORD=$$pg_password docker compose down --volumes --remove-orphans >/dev/null 2>&1 || true; \
+	}; \
+	trap cleanup EXIT; \
+	COMPOSE_PROJECT_NAME=$$project TRYOPS_POSTGRES_PORT=$$pg_port TRYOPS_POSTGRES_PASSWORD=$$pg_password docker compose down --volumes --remove-orphans >/dev/null 2>&1 || true; \
+	COMPOSE_PROJECT_NAME=$$project TRYOPS_POSTGRES_PORT=$$pg_port TRYOPS_POSTGRES_PASSWORD=$$pg_password docker compose up -d postgres; \
+	ready=0; \
+	for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do \
+		if COMPOSE_PROJECT_NAME=$$project TRYOPS_POSTGRES_PORT=$$pg_port TRYOPS_POSTGRES_PASSWORD=$$pg_password docker compose exec -T postgres pg_isready -U tryops -d tryops >/dev/null 2>&1; then ready=1; break; fi; \
+		sleep 1; \
+	done; \
+	test "$$ready" = "1"; \
+	cat infra/postgres/migrations/002_quota_usage.sql | COMPOSE_PROJECT_NAME=$$project TRYOPS_POSTGRES_PORT=$$pg_port TRYOPS_POSTGRES_PASSWORD=$$pg_password docker compose exec -T postgres psql -U tryops -d tryops >/dev/null; \
+	dsn="host=127.0.0.1 port=$$pg_port user=tryops password=$$pg_password dbname=tryops"; \
+	TRYOPS_GATEWAY_ADDR=127.0.0.1:18101 TRYOPS_GATEWAY_UPSTREAM=http://127.0.0.1:9 TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN="$$dsn" TRYOPS_GATEWAY_QUOTA_POSTGRES_ADMISSION=true ./artifacts/native/tryops-gateway > artifacts/native/tryops-gateway-quota-18101.log 2>&1 & pid1=$$!; \
+	TRYOPS_GATEWAY_ADDR=127.0.0.1:18102 TRYOPS_GATEWAY_UPSTREAM=http://127.0.0.1:9 TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN="$$dsn" TRYOPS_GATEWAY_QUOTA_POSTGRES_ADMISSION=true ./artifacts/native/tryops-gateway > artifacts/native/tryops-gateway-quota-18102.log 2>&1 & pid2=$$!; \
+	for port in 18101 18102; do \
+		ready=0; \
+		for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do \
+			if curl -fsS http://127.0.0.1:$$port/health >/dev/null 2>&1; then ready=1; break; fi; \
+			sleep 1; \
+		done; \
+		if [ "$$ready" != "1" ]; then cat artifacts/native/tryops-gateway-quota-$$port.log; exit 1; fi; \
+	done; \
+	artifacts/native/tryops_distributed_quota --gateway-urls http://127.0.0.1:18101,http://127.0.0.1:18102 --requests 32 --expected-allowed 20 --concurrency 16 --output artifacts/eval/quota/native_distributed_quota_admission.json; \
+	grep -q '"passed": true' artifacts/eval/quota/native_distributed_quota_admission.json; \
+	cat artifacts/eval/quota/native_distributed_quota_admission.json
 
 native-quota-read-model-build:
 	mkdir -p artifacts/native
@@ -1053,7 +1104,7 @@ app-down:
 roadmap-status:
 	PYTHONPATH=$(PYTHONPATH) python scripts/roadmap_status.py MLOPS_VTON_LLM_ENTERPRISE_ROADMAP.md
 
-smoke: native-policy-sample native-vton-preprocess-sample native-image-metrics-sample native-perf-stats-sample native-burn-rate-build energy-demo-sample quota-sample native-quota-read-model-sample native-runtime-telemetry-sample native-observability-contract-sample native-alertmanager-contract-sample native-dependency-lock-contract-sample native-secret-rotation-contract-sample native-db-migrator-sample native-backup-restore-sample native-tls-contract-sample native-quota-ledger-smoke native-rust-test native-rust-smoke native-edge-cache-smoke native-edge-guardrail-smoke auth-sample supply-chain-sample model-supply-chain-sample finops-sample orchestration-sample vton-preprocess-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample native-trace-envelope-sample native-container-contract-sample test validate-sample deploy-package-sample signed-pr-promotion-sample registry-webhook-sample chaos-sample vton-compare-sample vton-advanced-eval-sample llm-benchmark-sample guardrail-sample native-guardrail-test native-go-test native-config-contract-test native-db-migrator-test native-backup-restore-test native-tls-contract-test native-dependency-lock-contract-test native-performance-budget-test native-benchmark-test native-vllm-probe-test native-quantized-preflight-test native-job-runner-test native-slo-gate-test native-event-dispatcher-test native-demo-acceptance-test alert-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample slo-burn-rate-sample llm-sensitivity-sample llm-continuous-batching-sample native-eval-stats-build eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample governance-sample native-cpp-test native-gguf-preflight-test professor-demo-acceptance
+smoke: native-policy-sample native-vton-preprocess-sample native-image-metrics-sample native-perf-stats-sample native-burn-rate-build energy-demo-sample quota-sample native-quota-read-model-sample native-runtime-telemetry-sample native-observability-contract-sample native-alertmanager-contract-sample native-dependency-lock-contract-sample native-secret-rotation-contract-sample native-db-migrator-sample native-backup-restore-sample native-tls-contract-sample native-quota-ledger-smoke native-distributed-quota-smoke native-rust-test native-rust-smoke native-edge-cache-smoke native-edge-guardrail-smoke auth-sample supply-chain-sample model-supply-chain-sample finops-sample orchestration-sample vton-preprocess-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample native-trace-envelope-sample native-container-contract-sample test validate-sample deploy-package-sample signed-pr-promotion-sample registry-webhook-sample chaos-sample vton-compare-sample vton-advanced-eval-sample llm-benchmark-sample guardrail-sample native-guardrail-test native-go-test native-config-contract-test native-db-migrator-test native-backup-restore-test native-tls-contract-test native-dependency-lock-contract-test native-performance-budget-test native-benchmark-test native-vllm-probe-test native-quantized-preflight-test native-job-runner-test native-slo-gate-test native-event-dispatcher-test native-demo-acceptance-test alert-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample slo-burn-rate-sample llm-sensitivity-sample llm-continuous-batching-sample native-eval-stats-build eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample governance-sample native-cpp-test native-gguf-preflight-test professor-demo-acceptance
 
 vton-real-sample: native-vton-preprocess-build native-image-metrics-build
 	PYTHONPATH=$(PYTHONPATH) python scripts/create_synthetic_vton_demo.py --output-dir artifacts/demo/vton

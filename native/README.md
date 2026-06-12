@@ -81,6 +81,8 @@ Integration:
 - `TRYOPS_GATEWAY_TLS_CERT_PATH` and `TRYOPS_GATEWAY_TLS_KEY_PATH` switch the listener from plaintext
   HTTP to native rustls HTTPS. The optional Compose `gateway-tls` profile mounts these values from
   `tryops_tls_cert` and `tryops_tls_key` secrets.
+- `TRYOPS_GATEWAY_QUOTA_POSTGRES_ADMISSION=true` makes Postgres the shared quota admission ledger
+  using transactional row locks. This mode fails closed if the Postgres quota adapter is not active.
 - `tryops-gateway quota-check` exposes the same quota engine as a batch CLI for reproducible local artifacts.
 - `tryops-gateway health-check` verifies the running gateway from inside the container healthcheck;
   set `TRYOPS_GATEWAY_HEALTH_SCHEME=https` and `TRYOPS_GATEWAY_HEALTH_INSECURE=true` for local
@@ -127,6 +129,41 @@ Current binary:
 
 ```text
 artifacts/native/tryops_quota_read_model
+```
+
+## Go Distributed Quota Admission
+
+Path: `native/go/tryops-distributed-quota`
+
+Purpose:
+
+- Dependency-free Go live verifier for multi-gateway quota admission.
+- Drives concurrent quota requests across multiple Rust gateway base URLs.
+- Proves Postgres-backed admission does not oversell the free-plan request cap when more requests
+  arrive than the global limit.
+- Emits `tryops.distributed_quota_admission.v1` with gateway count, allowed/rejected totals, error
+  count, and no-oversell checks.
+
+Main files:
+
+- `config.go`: CLI flags for gateway URLs, request count, concurrency, and output path.
+- `client.go`: typed HTTP client for `/v1/quota/check`.
+- `runner.go`: concurrent request fanout across gateway instances.
+- `report.go`: pass/fail summary and JSON report writer.
+- `types.go`: request, decision, attempt, and report contracts.
+- `report_test.go`: exact-limit and oversell regression checks.
+
+Verified commands:
+
+```bash
+make native-distributed-quota-test
+make native-distributed-quota-smoke
+```
+
+Current binary:
+
+```text
+artifacts/native/tryops_distributed_quota
 ```
 
 ## Go Controller

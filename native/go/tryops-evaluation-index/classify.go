@@ -103,6 +103,8 @@ func titleForPath(path string, data map[string]interface{}) string {
 		return "Native full-stack load SLO"
 	case "tryops.native_container_contract.v1":
 		return "Native container image split"
+	case "tryops.distributed_quota_admission.v1":
+		return "Distributed quota admission"
 	case "tryops.native_quota_read_model.v1":
 		return "Native quota read model"
 	case "tryops.native_performance_budget.v1":

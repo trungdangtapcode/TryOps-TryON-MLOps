@@ -522,6 +522,20 @@ func TestSelectHighlightsIncludesQuotaReadModel(t *testing.T) {
 	}
 }
 
+func TestSelectHighlightsIncludesDistributedQuota(t *testing.T) {
+	highlights := selectHighlights([]artifactReport{
+		{
+			Name:          "native_distributed_quota_admission",
+			Path:          "artifacts/eval/quota/native_distributed_quota_admission.json",
+			SchemaVersion: "tryops.distributed_quota_admission.v1",
+		},
+	})
+	report, ok := highlights["distributed_quota"]
+	if !ok || report.SchemaVersion != "tryops.distributed_quota_admission.v1" {
+		t.Fatalf("expected distributed quota highlight: %#v", highlights)
+	}
+}
+
 func TestSelectHighlightsIncludesRuntimeTelemetry(t *testing.T) {
 	highlights := selectHighlights([]artifactReport{
 		{

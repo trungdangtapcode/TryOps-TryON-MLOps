@@ -92,6 +92,83 @@ async fn check_quota(
     Json(request): Json<QuotaCheckRequest>,
 ) -> Response {
     let started = Instant::now();
+    if state.quota_postgres_admission {
+        if let Some(durable) = &state.quota_durable {
+            match durable.check_and_record_postgres(request.clone()).await {
+                Ok(Some(decision)) => {
+                    if let Err(response) = sync_local_quota_snapshot(&state, &decision, started) {
+                        return response;
+                    }
+                    if decision.allowed {
+                        if let Err(error) = durable.record_valkey_allowed_decision(&decision).await
+                        {
+                            let response = gateway_error(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "quota_valkey_mirror_failed",
+                                error,
+                            );
+                            record_gateway_request(
+                                &state,
+                                "/v1/quota/check",
+                                "POST",
+                                response.status(),
+                                started,
+                            );
+                            return response;
+                        }
+                    }
+                    return quota_decision_response(&state, decision, started);
+                }
+                Ok(None) => {
+                    let response = gateway_error(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "quota_postgres_admission_unavailable",
+                        "Postgres admission was requested but no Postgres quota adapter is active"
+                            .to_string(),
+                    );
+                    record_gateway_request(
+                        &state,
+                        "/v1/quota/check",
+                        "POST",
+                        response.status(),
+                        started,
+                    );
+                    return response;
+                }
+                Err(error) => {
+                    let response = gateway_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "quota_postgres_admission_failed",
+                        error,
+                    );
+                    record_gateway_request(
+                        &state,
+                        "/v1/quota/check",
+                        "POST",
+                        response.status(),
+                        started,
+                    );
+                    return response;
+                }
+            }
+        } else {
+            let response = gateway_error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "quota_postgres_admission_unavailable",
+                "Postgres admission was requested but durable quota adapters are unavailable"
+                    .to_string(),
+            );
+            record_gateway_request(
+                &state,
+                "/v1/quota/check",
+                "POST",
+                response.status(),
+                started,
+            );
+            return response;
+        }
+    }
+
     let decision = {
         let mut ledger = state.quota.lock().expect("quota ledger mutex poisoned");
         match ledger.check_and_record(request) {
@@ -142,11 +219,7 @@ async fn check_quota(
                     }
                 }
             }
-            {
-                let mut metrics = state.metrics.lock().expect("metrics ledger mutex poisoned");
-                metrics.record_quota_decision(decision.allowed, &decision.workload, &decision.plan);
-            }
-            (StatusCode::OK, Json(decision)).into_response()
+            return quota_decision_response(&state, decision, started);
         }
         Err(error) => (
             StatusCode::UNPROCESSABLE_ENTITY,
@@ -167,6 +240,41 @@ async fn check_quota(
         response.status(),
         started,
     );
+    response
+}
+
+fn sync_local_quota_snapshot(
+    state: &Arc<AppState>,
+    decision: &crate::quota::QuotaDecision,
+    started: Instant,
+) -> Result<(), Response> {
+    let mut ledger = state.quota.lock().expect("quota ledger mutex poisoned");
+    ledger.apply_decision_snapshot(decision);
+    if let Some(store) = &state.quota_store {
+        if let Err(error) = store.save(&ledger) {
+            let response = gateway_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "quota_ledger_persist_failed",
+                error,
+            );
+            record_gateway_request(state, "/v1/quota/check", "POST", response.status(), started);
+            return Err(response);
+        }
+    }
+    Ok(())
+}
+
+fn quota_decision_response(
+    state: &Arc<AppState>,
+    decision: crate::quota::QuotaDecision,
+    started: Instant,
+) -> Response {
+    {
+        let mut metrics = state.metrics.lock().expect("metrics ledger mutex poisoned");
+        metrics.record_quota_decision(decision.allowed, &decision.workload, &decision.plan);
+    }
+    let response = (StatusCode::OK, Json(decision)).into_response();
+    record_gateway_request(state, "/v1/quota/check", "POST", response.status(), started);
     response
 }
 

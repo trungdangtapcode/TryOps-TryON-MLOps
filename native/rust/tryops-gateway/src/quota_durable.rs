@@ -3,10 +3,14 @@ use std::{env, fs, sync::Arc};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
+    sync::Mutex,
 };
 use tokio_postgres::{Client, NoTls};
 
-use crate::quota::QuotaDecision;
+use crate::quota::{
+    current_period_key, dimension_limit, usage_dimensions, user_hash, QuotaCheckRequest,
+    QuotaDecision, QuotaDimensionCheck,
+};
 
 const POSTGRES_DSN_ENV: &str = "TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN";
 const POSTGRES_DSN_FILE_ENV: &str = "TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN_FILE";
@@ -23,7 +27,7 @@ pub(crate) struct QuotaDurableStore {
 
 #[derive(Clone)]
 struct PostgresQuotaStore {
-    client: Arc<Client>,
+    client: Arc<Mutex<Client>>,
 }
 
 #[derive(Clone)]
@@ -83,6 +87,16 @@ impl QuotaDurableStore {
         names
     }
 
+    pub(crate) async fn check_and_record_postgres(
+        &self,
+        request: QuotaCheckRequest,
+    ) -> Result<Option<QuotaDecision>, String> {
+        let Some(postgres) = &self.postgres else {
+            return Ok(None);
+        };
+        postgres.check_and_record(request).await.map(Some)
+    }
+
     pub(crate) async fn record_allowed_decision(
         &self,
         decision: &QuotaDecision,
@@ -109,20 +123,34 @@ impl QuotaDurableStore {
             Err(errors.join("; "))
         }
     }
+
+    pub(crate) async fn record_valkey_allowed_decision(
+        &self,
+        decision: &QuotaDecision,
+    ) -> Result<(), String> {
+        let Some(valkey) = &self.valkey else {
+            return Ok(());
+        };
+        let deltas = usage_deltas(decision);
+        if deltas.is_empty() {
+            return Ok(());
+        }
+        valkey.record_deltas(&deltas).await
+    }
 }
 
 impl PostgresQuotaStore {
     async fn connect(dsn: &str) -> Result<Self, String> {
         let (client, connection) = tokio_postgres::connect(dsn, NoTls)
             .await
-            .map_err(|error| format!("connect quota Postgres ledger: {error}"))?;
+            .map_err(|error| format!("connect quota Postgres ledger: {error:?}"))?;
         tokio::spawn(async move {
             if let Err(error) = connection.await {
                 tracing::error!("quota Postgres connection failed: {error}");
             }
         });
         let store = Self {
-            client: Arc::new(client),
+            client: Arc::new(Mutex::new(client)),
         };
         store.initialize().await?;
         Ok(store)
@@ -130,6 +158,8 @@ impl PostgresQuotaStore {
 
     async fn initialize(&self) -> Result<(), String> {
         self.client
+            .lock()
+            .await
             .batch_execute(
                 "
                 CREATE TABLE IF NOT EXISTS tryops_quota_usage (
@@ -145,14 +175,15 @@ impl PostgresQuotaStore {
                 ",
             )
             .await
-            .map_err(|error| format!("initialize quota Postgres ledger: {error}"))
+            .map_err(|error| format!("initialize quota Postgres ledger: {error:?}"))
     }
 
     async fn record_deltas(&self, deltas: &[QuotaUsageDelta]) -> Result<(), String> {
+        let client = self.client.lock().await;
         for delta in deltas {
             let increment = i64::try_from(delta.increment)
                 .map_err(|_| format!("quota increment overflows i64: {}", delta.increment))?;
-            self.client
+            client
                 .execute(
                     "
                     INSERT INTO tryops_quota_usage
@@ -177,12 +208,162 @@ impl PostgresQuotaStore {
                 .await
                 .map_err(|error| {
                     format!(
-                        "upsert quota usage {}:{}:{}: {error}",
+                        "upsert quota usage {}:{}:{}: {error:?}",
                         delta.period, delta.user_hash, delta.dimension
                     )
                 })?;
         }
         Ok(())
+    }
+
+    async fn check_and_record(&self, request: QuotaCheckRequest) -> Result<QuotaDecision, String> {
+        let mut dimensions = usage_dimensions(&request)?
+            .into_iter()
+            .map(|(dimension, increment)| {
+                let limit = dimension_limit(&request.plan, dimension)
+                    .ok_or_else(|| format!("unsupported quota dimension '{dimension}'"))?;
+                Ok((dimension, increment, limit))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        dimensions.sort_by(|left, right| left.0.cmp(right.0));
+
+        let period = request.period.clone().unwrap_or_else(current_period_key);
+        let user_hash = user_hash(&request.user_id);
+        let mut client = self.client.lock().await;
+        let transaction = client
+            .transaction()
+            .await
+            .map_err(|error| format!("start quota Postgres admission transaction: {error:?}"))?;
+
+        let mut checks = Vec::with_capacity(dimensions.len());
+        for (dimension, increment, limit) in dimensions {
+            let increment_i64 = i64::try_from(increment)
+                .map_err(|_| format!("quota increment overflows i64: {increment}"))?;
+            let limit_i64 =
+                i64::try_from(limit).map_err(|_| format!("quota limit overflows i64: {limit}"))?;
+            transaction
+                .execute(
+                    "
+                    INSERT INTO tryops_quota_usage
+                        (period, user_hash, dimension, plan, workload, used, updated_at)
+                    VALUES ($1, $2, $3, $4, $5, 0, NOW())
+                    ON CONFLICT (period, user_hash, dimension) DO NOTHING;
+                    ",
+                    &[
+                        &period,
+                        &user_hash,
+                        &dimension,
+                        &request.plan,
+                        &request.workload,
+                    ],
+                )
+                .await
+                .map_err(|error| {
+                    format!(
+                        "initialize quota admission row {period}:{user_hash}:{dimension}: {error:?}"
+                    )
+                })?;
+            let row = transaction
+                .query_one(
+                    "
+                    SELECT used
+                    FROM tryops_quota_usage
+                    WHERE period = $1 AND user_hash = $2 AND dimension = $3
+                    FOR UPDATE;
+                    ",
+                    &[&period, &user_hash, &dimension],
+                )
+                .await
+                .map_err(|error| {
+                    format!("lock quota admission row {period}:{user_hash}:{dimension}: {error:?}")
+                })?;
+            let used_i64: i64 = row.get(0);
+            if used_i64 < 0 {
+                return Err(format!(
+                    "quota admission row {period}:{user_hash}:{dimension} has negative usage {used_i64}"
+                ));
+            }
+            let used = u64::try_from(used_i64)
+                .map_err(|_| format!("quota usage overflows u64: {used_i64}"))?;
+            let remaining_before = limit.saturating_sub(used);
+            let allowed = used_i64.saturating_add(increment_i64) <= limit_i64;
+            checks.push(QuotaDimensionCheck {
+                dimension: dimension.to_string(),
+                limit,
+                used,
+                increment,
+                remaining_before,
+                allowed,
+                used_after: used,
+                remaining_after: remaining_before,
+            });
+        }
+
+        let allowed = checks.iter().all(|check| check.allowed);
+        if allowed {
+            for check in &mut checks {
+                if check.increment == 0 {
+                    continue;
+                }
+                let increment = i64::try_from(check.increment)
+                    .map_err(|_| format!("quota increment overflows i64: {}", check.increment))?;
+                let row = transaction
+                    .query_one(
+                        "
+                        UPDATE tryops_quota_usage
+                        SET
+                            plan = $4,
+                            workload = $5,
+                            used = used + $6,
+                            updated_at = NOW()
+                        WHERE period = $1 AND user_hash = $2 AND dimension = $3
+                        RETURNING used;
+                        ",
+                        &[
+                            &period,
+                            &user_hash,
+                            &check.dimension,
+                            &request.plan,
+                            &request.workload,
+                            &increment,
+                        ],
+                    )
+                    .await
+                    .map_err(|error| {
+                        format!(
+                            "update quota admission row {}:{}:{}: {error:?}",
+                            period, user_hash, check.dimension
+                        )
+                    })?;
+                let used_after_i64: i64 = row.get(0);
+                if used_after_i64 < 0 {
+                    return Err(format!(
+                        "quota admission row {}:{}:{} returned negative usage {}",
+                        period, user_hash, check.dimension, used_after_i64
+                    ));
+                }
+                let used_after = u64::try_from(used_after_i64)
+                    .map_err(|_| format!("quota usage overflows u64: {used_after_i64}"))?;
+                check.used_after = used_after;
+                check.remaining_after = check.limit.saturating_sub(used_after);
+            }
+            transaction.commit().await.map_err(|error| {
+                format!("commit quota Postgres admission transaction: {error:?}")
+            })?;
+        } else {
+            transaction.rollback().await.map_err(|error| {
+                format!("rollback quota Postgres admission transaction: {error:?}")
+            })?;
+        }
+
+        Ok(QuotaDecision::new(
+            allowed,
+            period,
+            user_hash,
+            request.plan,
+            request.workload,
+            checks,
+        ))
     }
 }
 
