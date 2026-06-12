@@ -45,13 +45,29 @@ struct QuotaUsageDelta {
 
 impl QuotaDurableStore {
     pub(crate) async fn from_env() -> Result<Option<Self>, String> {
+        let mut errors = Vec::new();
         let postgres = match postgres_dsn_from_env()? {
-            Some(dsn) => Some(PostgresQuotaStore::connect(&dsn).await?),
+            Some(dsn) => match PostgresQuotaStore::connect(&dsn).await {
+                Ok(store) => Some(store),
+                Err(error) => {
+                    errors.push(error);
+                    None
+                }
+            },
             None => None,
         };
         let valkey = optional_env(VALKEY_ADDR_ENV).map(ValkeyQuotaStore::from_address);
         if postgres.is_none() && valkey.is_none() {
-            return Ok(None);
+            if errors.is_empty() {
+                return Ok(None);
+            }
+            return Err(errors.join("; "));
+        }
+        if !errors.is_empty() {
+            tracing::warn!(
+                errors = ?errors,
+                "durable quota adapter startup degraded"
+            );
         }
         Ok(Some(Self { postgres, valkey }))
     }

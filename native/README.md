@@ -369,7 +369,8 @@ Purpose:
 - Parses `docker-compose.yml` with a real YAML parser and checks each required image role has a
   matching Compose service, build context, and Dockerfile.
 - Checks Dockerfiles for multi-stage native builds, non-SDK runtime stages, source-path coverage,
-  and role coverage for gateway, controller, guardrail, benchmark, C++ tools, API, and web assets.
+  Rust builder/runtime ABI-suite compatibility, and role coverage for gateway, controller,
+  guardrail, benchmark, C++ tools, API, and web assets.
 - Emits `tryops.native_container_contract.v1` so container drift is CI evidence instead of a
   deployment surprise.
 

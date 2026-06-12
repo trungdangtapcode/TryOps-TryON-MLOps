@@ -1375,7 +1375,8 @@ Date: 2026-06-11
   - `artifacts/eval/evaluation_index/evaluation_index.json`
 - Outcome: the native Go checker validates seven required image roles, matching Compose services,
   explicit Dockerfile/context wiring, source path coverage, multi-stage native builds, and non-SDK
-  runtime stages. The report passes 87/87 checks and is highlighted by the evaluation index.
+  runtime stages, including Rust builder/runtime ABI-suite compatibility. The report passes 89/89
+  checks and is highlighted by the evaluation index.
 - Notes: this closes PA084 at the local contract level. CI should still build, scan, sign, and push
   the images with digest/provenance metadata before a production release.
 
@@ -1656,3 +1657,34 @@ Date: 2026-06-11
 - Notes: this closes PA063 for local/native reproducibility evidence. The older generated
   `requirements.lock` remains as a supply-chain fallback artifact, while `uv.lock` is the canonical
   resolved Python project lock.
+
+## EXP-090: Native App-Smoke And Container ABI Hardening
+
+- Command: `make native-rust-test native-static-smoke native-edge-cache-smoke`;
+  `make native-job-runner-test native-event-dispatcher-test native-slo-gate-test native-config-contract-test native-performance-budget-test native-quota-read-model-test native-trace-envelope-test native-container-contract-test`;
+  `make native-container-contract-sample`; `docker compose down && make app-smoke`
+- Workload: Gateway container ABI hardening, disposable full-stack smoke, durable quota mirror
+  degradation, and local P8 closure for PA072-PA086
+- Evidence files:
+  - `Dockerfile.gateway`
+  - `Dockerfile.benchmark`
+  - `Makefile`
+  - `native/rust/tryops-gateway/src/quota_durable.rs`
+  - `native/rust/tryops-gateway/src/state.rs`
+  - `native/go/tryops-container-contract/`
+  - `artifacts/eval/containers/native_container_contract_report.json`
+  - `artifacts/eval/full_stack/full_stack_smoke.json`
+  - `artifacts/eval/jobs/native_job_runner_report.json`
+  - `artifacts/eval/evaluation_index/evaluation_index.json`
+- Outcome: Rust builder stages are pinned to Bookworm-compatible images so the gateway binary is
+  built against the same Debian ABI family used at runtime. The native container contract now fails
+  unversioned or mismatched Rust builder/runtime suites and passes 89/89 checks locally. The Rust
+  gateway no longer panics when an optional durable quota mirror is unavailable; it logs the failure
+  and continues on the local ledger path. `make app-smoke` now runs inside a disposable
+  `tryops_app_smoke` Compose project, recreates smoke volumes before startup, and tears them down on
+  exit.
+- Notes: this closes PA072-PA086 for local/native P8 evidence. The final smoke passed 18/18
+  full-stack checks and then passed both native job-runner jobs through the Rust gateway. Live Vault
+  secret fetch/rotation, live Syft/Trivy/Cosign execution, external k6/locust confirmation,
+  external error-tracker DSN exercise, live OTLP exporters, and distributed quota validation remain
+  production-profile work rather than local P8 gaps.

@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -34,6 +35,33 @@ func TestEvaluateRejectsMissingRole(t *testing.T) {
 	if report.Passed {
 		t.Fatalf("expected missing roles to fail")
 	}
+}
+
+func TestValidateImageSpecRejectsUnversionedRustBuilderABI(t *testing.T) {
+	root := t.TempDir()
+	content := "FROM rust:1-slim AS builder\nRUN cargo build --release\nFROM debian:bookworm-slim\nCOPY --from=builder /build/target/release/tryops-gateway /usr/local/bin/tryops-gateway\n"
+	if err := os.WriteFile(filepath.Join(root, "Dockerfile.gateway"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	checks := validateImageSpec(root, ImageSpec{
+		Role:          "gateway",
+		Dockerfile:    "Dockerfile.gateway",
+		RequiredStage: "rust",
+	})
+	for _, check := range checks {
+		if check.Name != "gateway_rust_runtime_abi_compatible" {
+			continue
+		}
+		if check.Passed {
+			t.Fatalf("expected ABI compatibility check to fail")
+		}
+		if !strings.Contains(check.Detail, "builder_suite=unversioned") {
+			t.Fatalf("expected unversioned builder detail, got %q", check.Detail)
+		}
+		return
+	}
+	t.Fatalf("ABI compatibility check not found: %#v", checks)
 }
 
 func failedChecks(checks []Check) []Check {

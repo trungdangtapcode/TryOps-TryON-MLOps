@@ -167,6 +167,14 @@ func validateImageSpec(root string, image ImageSpec) []Check {
 			Detail: info.FinalBase,
 		})
 	}
+	if strings.Contains(strings.ToLower(info.Content), "rust:") {
+		passed, detail := rustRuntimeABICheck(info)
+		checks = append(checks, Check{
+			Name:   image.Role + "_rust_runtime_abi_compatible",
+			Passed: passed,
+			Detail: detail,
+		})
+	}
 	missingSources := missingSourcePaths(root, image.SourcePaths)
 	checks = append(checks, Check{
 		Name:   image.Role + "_source_paths_exist",

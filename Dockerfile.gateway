@@ -7,7 +7,7 @@ COPY web/index.html web/tsconfig.json web/tsconfig.node.json web/vite.config.ts 
 COPY web/src ./src
 RUN npm run build
 
-FROM rust:1-slim AS builder
+FROM rust:1-slim-bookworm AS builder
 
 WORKDIR /build
 COPY native/rust/tryops-gateway/Cargo.toml native/rust/tryops-gateway/Cargo.lock ./

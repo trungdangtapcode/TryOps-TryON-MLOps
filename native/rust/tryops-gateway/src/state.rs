@@ -44,9 +44,16 @@ impl AppState {
                 .expect("load TRYOPS_GATEWAY_QUOTA_LEDGER_PATH quota ledger"),
             None => QuotaLedger::default(),
         };
-        let quota_durable = QuotaDurableStore::from_env()
-            .await
-            .expect("load TRYOPS_GATEWAY_QUOTA_* durable quota adapters");
+        let quota_durable = match QuotaDurableStore::from_env().await {
+            Ok(store) => store,
+            Err(error) => {
+                tracing::error!(
+                    error = %error,
+                    "durable quota mirror disabled; falling back to local quota ledger"
+                );
+                None
+            }
+        };
         if let Some(store) = &quota_durable {
             tracing::info!(
                 adapters = ?store.adapter_names(),

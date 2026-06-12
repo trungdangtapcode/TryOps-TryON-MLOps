@@ -1014,6 +1014,10 @@ app-up: evaluation-index-sample
 
 app-smoke: native-stack-smoke-build native-job-runner-build evaluation-index-sample
 	@set -eu; \
+	project=tryops_app_smoke; \
+	COMPOSE_PROJECT_NAME=$$project docker compose down --volumes --remove-orphans >/dev/null 2>&1 || true; \
+	trap "COMPOSE_PROJECT_NAME=$$project docker compose down --volumes --remove-orphans >/dev/null 2>&1 || true" EXIT; \
+	COMPOSE_PROJECT_NAME=$$project \
 	TRYOPS_POSTGRES_PORT=15432 \
 	TRYOPS_POSTGRES_USER=$${TRYOPS_POSTGRES_USER:-tryops} \
 	TRYOPS_POSTGRES_DB=$${TRYOPS_POSTGRES_DB:-tryops} \
