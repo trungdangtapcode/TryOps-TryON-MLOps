@@ -12,7 +12,7 @@ func validateWorkflow(workflow string) []Check {
 	addContains("workflow_compose_and_native_contracts", []string{"docker compose config --quiet", "docker compose --profile tls config --quiet", "make native-container-contract-sample", "make native-dependency-lock-contract-sample", "make native-ci-contract-live", "make evaluation-index-sample"})
 	addContains("workflow_artifact_uploads", []string{"actions/upload-artifact@v4", "artifacts/eval", "retention-days:"})
 	addContains("workflow_image_matrix_roles", []string{"role: gateway", "role: controller", "role: guardrail", "role: benchmark", "role: cpp-tools", "role: api", "role: web-assets"})
-	addContains("workflow_docker_build_metadata", []string{"docker/setup-buildx-action@v3", "docker/build-push-action@v6", "sbom: true", "provenance: true"})
+	addContains("workflow_docker_build_metadata", []string{"docker/setup-buildx-action@v3", "docker/build-push-action@v6", "load: ${{ github.event_name == 'pull_request' }}", "sbom: ${{ github.event_name != 'pull_request' }}", "provenance: ${{ github.event_name != 'pull_request' }}"})
 	addContains("workflow_syft_sbom_generation", []string{"anchore/sbom-action@v0", "format: spdx-json", "output-file: artifacts/eval/ci/sbom/"})
 	addContains("workflow_trivy_high_critical_gate", []string{"aquasecurity/trivy-action@", "scanners: vuln,secret,misconfig", "severity: HIGH,CRITICAL", "exit-code: \"1\""})
 	addContains("workflow_cosign_keyless_signing", []string{"sigstore/cosign-installer@", "cosign sign --yes", "github.event_name != 'pull_request'"})

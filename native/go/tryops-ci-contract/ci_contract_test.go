@@ -42,8 +42,9 @@ role: api
 role: web-assets
 docker/setup-buildx-action@v3
 docker/build-push-action@v6
-sbom: true
-provenance: true
+load: ${{ github.event_name == 'pull_request' }}
+sbom: ${{ github.event_name != 'pull_request' }}
+provenance: ${{ github.event_name != 'pull_request' }}
 anchore/sbom-action@v0
 format: spdx-json
 output-file: artifacts/eval/ci/sbom/
@@ -100,8 +101,9 @@ role: api
 role: web-assets
 docker/setup-buildx-action@v3
 docker/build-push-action@v6
-sbom: true
-provenance: true
+load: ${{ github.event_name == 'pull_request' }}
+sbom: ${{ github.event_name != 'pull_request' }}
+provenance: ${{ github.event_name != 'pull_request' }}
 anchore/sbom-action@v0
 format: spdx-json
 output-file: artifacts/eval/ci/sbom/
@@ -186,8 +188,9 @@ role: api
 role: web-assets
 docker/setup-buildx-action@v3
 docker/build-push-action@v6
-sbom: true
-provenance: true
+load: ${{ github.event_name == 'pull_request' }}
+sbom: ${{ github.event_name != 'pull_request' }}
+provenance: ${{ github.event_name != 'pull_request' }}
 anchore/sbom-action@v0
 format: spdx-json
 output-file: artifacts/eval/ci/sbom/

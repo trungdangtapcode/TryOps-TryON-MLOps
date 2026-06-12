@@ -145,8 +145,8 @@ jobs:
             ${{ env.IMAGE_PREFIX }}/tryops-${{ matrix.image.role }}:ci
           load: ${{ github.event_name == 'pull_request' }}
           push: ${{ github.event_name != 'pull_request' }}
-          sbom: true
-          provenance: true
+          sbom: ${{ github.event_name != 'pull_request' }}
+          provenance: ${{ github.event_name != 'pull_request' }}
 
       - name: Prepare image evidence directories
         run: mkdir -p artifacts/eval/ci/sbom artifacts/eval/ci/trivy artifacts/eval/ci/signatures
