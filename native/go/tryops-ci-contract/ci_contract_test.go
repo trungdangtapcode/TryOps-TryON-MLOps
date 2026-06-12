@@ -41,6 +41,10 @@ role: benchmark
 role: cpp-tools
 role: api
 role: web-assets
+Normalize image prefix
+tr '[:upper:]' '[:lower:]'
+IMAGE_PREFIX=${REGISTRY}/${LOWER_REPOSITORY}
+GITHUB_ENV
 docker/setup-buildx-action@v3
 docker/build-push-action@v6
 load: ${{ github.event_name == 'pull_request' }}
@@ -102,6 +106,10 @@ role: benchmark
 role: cpp-tools
 role: api
 role: web-assets
+Normalize image prefix
+tr '[:upper:]' '[:lower:]'
+IMAGE_PREFIX=${REGISTRY}/${LOWER_REPOSITORY}
+GITHUB_ENV
 docker/setup-buildx-action@v3
 docker/build-push-action@v6
 load: ${{ github.event_name == 'pull_request' }}
@@ -191,6 +199,10 @@ role: benchmark
 role: cpp-tools
 role: api
 role: web-assets
+Normalize image prefix
+tr '[:upper:]' '[:lower:]'
+IMAGE_PREFIX=${REGISTRY}/${LOWER_REPOSITORY}
+GITHUB_ENV
 docker/setup-buildx-action@v3
 docker/build-push-action@v6
 load: ${{ github.event_name == 'pull_request' }}
