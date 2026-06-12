@@ -34,6 +34,7 @@ def read_png_rgb(path: str | Path) -> RgbImage:
     width: int | None = None
     height: int | None = None
     color_type: int | None = None
+    interlace_method: int | None = None
     idat_parts: list[bytes] = []
 
     while offset + 8 <= len(data):
@@ -50,6 +51,11 @@ def read_png_rgb(path: str | Path) -> RgbImage:
                 raise ValueError("only 8-bit PNG images are supported")
             if color_type not in {0, 2, 6}:
                 raise ValueError("only grayscale, RGB, and RGBA PNG images are supported")
+            if chunk_data[10] != 0 or chunk_data[11] != 0:
+                raise ValueError("unsupported PNG compression or filter method")
+            interlace_method = chunk_data[12]
+            if interlace_method != 0:
+                raise ValueError("interlaced PNG images are not supported")
         elif chunk_type == b"IDAT":
             idat_parts.append(chunk_data)
         elif chunk_type == b"IEND":
@@ -70,13 +76,14 @@ def read_png_rgb(path: str | Path) -> RgbImage:
     rgb = bytearray(width * height * 3)
     source_offset = 0
     target_offset = 0
+    previous_row = bytes(row_bytes)
     for _row in range(height):
         filter_type = decompressed[source_offset]
         source_offset += 1
-        if filter_type != 0:
-            raise ValueError("only PNG filter type 0 is supported by the lightweight baseline")
-        row = decompressed[source_offset : source_offset + row_bytes]
+        filtered_row = decompressed[source_offset : source_offset + row_bytes]
         source_offset += row_bytes
+        row = _unfilter_png_scanline(filter_type, filtered_row, previous_row, channels)
+        previous_row = row
         if color_type == 0:
             for value in row:
                 rgb[target_offset : target_offset + 3] = bytes([value, value, value])
@@ -90,6 +97,41 @@ def read_png_rgb(path: str | Path) -> RgbImage:
                 target_offset += 3
 
     return RgbImage(width=width, height=height, pixels=bytes(rgb))
+
+
+def _unfilter_png_scanline(filter_type: int, row: bytes, previous_row: bytes, bytes_per_pixel: int) -> bytes:
+    if filter_type == 0:
+        return bytes(row)
+    if filter_type not in {1, 2, 3, 4}:
+        raise ValueError(f"unsupported PNG filter type {filter_type}")
+
+    output = bytearray(len(row))
+    for index, value in enumerate(row):
+        left = output[index - bytes_per_pixel] if index >= bytes_per_pixel else 0
+        up = previous_row[index] if previous_row else 0
+        upper_left = previous_row[index - bytes_per_pixel] if previous_row and index >= bytes_per_pixel else 0
+        if filter_type == 1:
+            predictor = left
+        elif filter_type == 2:
+            predictor = up
+        elif filter_type == 3:
+            predictor = (left + up) // 2
+        else:
+            predictor = _paeth_predictor(left, up, upper_left)
+        output[index] = (value + predictor) & 0xFF
+    return bytes(output)
+
+
+def _paeth_predictor(left: int, up: int, upper_left: int) -> int:
+    estimate = left + up - upper_left
+    left_distance = abs(estimate - left)
+    up_distance = abs(estimate - up)
+    upper_left_distance = abs(estimate - upper_left)
+    if left_distance <= up_distance and left_distance <= upper_left_distance:
+        return left
+    if up_distance <= upper_left_distance:
+        return up
+    return upper_left
 
 
 def write_png_rgb(path: str | Path, image: RgbImage) -> None:
@@ -146,4 +188,3 @@ def _chunk(chunk_type: bytes, data: bytes) -> bytes:
     crc = binascii.crc32(chunk_type)
     crc = binascii.crc32(data, crc)
     return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", crc & 0xFFFFFFFF)
-

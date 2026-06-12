@@ -628,18 +628,73 @@ th {
 }
 
 .asset-preview {
+  position: relative;
   display: grid;
   min-height: 190px;
   place-items: center;
   border: 1px dashed #ccd4c6;
   background: #ffffff;
   color: #65705f;
+  overflow: hidden;
+}
+
+.asset-input.drag-active .asset-preview {
+  border-color: #26856d;
+  background: #eef8f3;
+  box-shadow: 0 0 0 3px rgba(38, 133, 109, 0.14);
 }
 
 .asset-preview img {
   width: 100%;
   height: 190px;
   object-fit: contain;
+}
+
+.upload-overlay {
+  position: absolute;
+  inset: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.82);
+  color: #20231f;
+  font-weight: 800;
+}
+
+.asset-current {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #e5eadf;
+  background: #ffffff;
+}
+
+.asset-current span {
+  color: #65705f;
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.asset-current strong {
+  overflow: hidden;
+  color: #20231f;
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.78rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-error {
+  padding: 9px 10px;
+  border: 1px solid #ffd1d1;
+  background: #fff5f5;
+  color: #9f1c1c;
+  font-size: 0.84rem;
+  font-weight: 700;
 }
 
 .comparison-strip {
@@ -750,6 +805,15 @@ th {
   inset: 0;
   opacity: 0;
   cursor: pointer;
+}
+
+.file-button.disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.file-button.disabled input {
+  cursor: wait;
 }
 
 .report-grid {

@@ -48,6 +48,32 @@ export interface VtonPayload {
   quota_plan: string;
 }
 
+export interface VtonUploadPayload {
+  role: "person" | "garment";
+  filename: string;
+  data_url: string;
+}
+
+export interface VtonUploadResponse {
+  status: string;
+  data?: {
+    path: string;
+    url?: string;
+    role: string;
+    filename: string;
+    content_type: string;
+    source_size_bytes: number;
+    size_bytes: number;
+    width: number;
+    height: number;
+  };
+  error?: {
+    code: string;
+    message: string;
+    details?: Array<Record<string, unknown>>;
+  };
+}
+
 export interface FeedbackPayload {
   request_id: string;
   user_id: string;
@@ -58,6 +84,10 @@ export interface FeedbackPayload {
 
 export class TryOpsClient {
   constructor(private readonly apiKey: string) {}
+
+  hasApiKey(): boolean {
+    return Boolean(this.apiKey.trim());
+  }
 
   async health(): Promise<{ status: string }> {
     return this.get("/api/health", false);
@@ -210,6 +240,13 @@ export class TryOpsClient {
 
   async runVton(payload: VtonPayload): Promise<VtonResponse> {
     return this.post("/api/vton/infer", payload);
+  }
+
+  async uploadVtonImage(payload: VtonUploadPayload): Promise<VtonUploadResponse> {
+    return this.post("/api/vton/upload", {
+      ...payload,
+      api_key: this.apiKey.trim()
+    });
   }
 
   async submitFeedback(payload: FeedbackPayload): Promise<{ status: string; id?: string }> {
