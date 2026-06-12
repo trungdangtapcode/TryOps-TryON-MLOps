@@ -46,9 +46,11 @@ from tryops.vton_native_bridge import build_native_vton_execution_evidence
 
 try:
     from fastapi import FastAPI, Response
+    from fastapi.middleware.cors import CORSMiddleware
     from fastapi.responses import FileResponse
 except ImportError:  # pragma: no cover - optional runtime dependency
     FastAPI = None  # type: ignore[assignment]
+    CORSMiddleware = None  # type: ignore[assignment]
     Response = None  # type: ignore[assignment]
     FileResponse = None  # type: ignore[assignment]
 
@@ -64,6 +66,13 @@ def create_app() -> Any:
         docs_url="/api/docs",
         openapi_url="/api/openapi.json",
         redoc_url=None,
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        allow_credentials=False,
     )
 
     @app.get("/api/health")
