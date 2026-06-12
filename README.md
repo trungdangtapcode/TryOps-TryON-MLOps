@@ -10,6 +10,156 @@ The repo is intentionally native-first at the production boundary:
 - Python: FastAPI product BFF, model adapters, deterministic fallbacks, orchestration glue, contract tests.
 - React/Vite/TypeScript: browser Console under `web/`.
 
+## Newbie Quick Start
+
+You have two good ways to run this repo. Pick **Option A** if you just want to see the product working. Pick **Option B** if you are editing the frontend with `npm run dev`.
+
+### Option A: Easiest Full App
+
+This starts the real local product stack: Rust gateway, React Console, FastAPI backend, Postgres, Valkey, MinIO, MLflow, Prometheus, Grafana, and Go guardrail.
+
+Terminal 1:
+
+```bash
+cd /home/tcuong1000/flow
+make app-up
+```
+
+Wait until the command finishes. Then open:
+
+```text
+http://127.0.0.1:18081
+```
+
+Use this API key in the Console:
+
+```text
+tryops-viewer-demo-key
+```
+
+Check that backend is alive:
+
+```bash
+curl -fsS http://127.0.0.1:18081/api/health
+```
+
+Stop everything:
+
+```bash
+make app-down
+```
+
+Use this option when you want the closest local version of the enterprise product. You do **not** need `npm run dev` for Option A because the Rust gateway serves the built frontend.
+
+### Option B: Frontend Dev + Simple Backend
+
+Use this when you already ran `npm run dev` and want a backend/database for it.
+
+Terminal 1, start the backend with the simple SQLite database:
+
+```bash
+cd /home/tcuong1000/flow
+python -m pip install -e ".[dev]"
+make db-init
+PYTHONPATH=src python -m uvicorn tryops.api:create_app --factory --host 0.0.0.0 --port 8080
+```
+
+Leave Terminal 1 running.
+
+Terminal 2, start the frontend and point it at the backend:
+
+```bash
+cd /home/tcuong1000/flow
+npm --prefix web ci
+VITE_TRYOPS_API_BASE=http://127.0.0.1:8080 npm --prefix web run dev
+```
+
+Open:
+
+```text
+http://127.0.0.1:5173
+```
+
+Use this API key in the Console:
+
+```text
+tryops-viewer-demo-key
+```
+
+If your frontend is already running from plain `npm run dev`, stop it with `Ctrl-C` and restart it with the `VITE_TRYOPS_API_BASE=... npm --prefix web run dev` command above. Otherwise the UI may open but API calls will fail.
+
+In Option B, the database is this local SQLite file:
+
+```text
+artifacts/app/tryops.db
+```
+
+Quick backend checks:
+
+```bash
+curl -fsS http://127.0.0.1:8080/api/health
+curl -fsS "http://127.0.0.1:8080/api/auth/session?api_key=tryops-viewer-demo-key"
+curl -fsS "http://127.0.0.1:8080/api/dashboard?api_key=tryops-viewer-demo-key"
+```
+
+### Which Option Should I Use?
+
+Use this first:
+
+```text
+Option A: make app-up
+```
+
+Use this while changing React code:
+
+```text
+Option B: FastAPI on 8080 + Vite on 5173
+```
+
+Use this to prove the stack works automatically:
+
+```bash
+make app-smoke
+```
+
+## What Runs Where
+
+```text
+http://127.0.0.1:18081  Full app through Rust gateway, from make app-up
+http://127.0.0.1:18080  FastAPI direct, from make app-up
+http://127.0.0.1:8080   FastAPI direct, from manual uvicorn dev command
+http://127.0.0.1:5173   Vite frontend dev server
+http://127.0.0.1:13000  Grafana, from make app-up
+http://127.0.0.1:19090  Prometheus, from make app-up
+http://127.0.0.1:15000  MLflow, from make app-up
+http://127.0.0.1:19001  MinIO Console, from make app-up
+```
+
+## Common Problems
+
+If the frontend opens but data does not load, restart frontend like this:
+
+```bash
+VITE_TRYOPS_API_BASE=http://127.0.0.1:8080 npm --prefix web run dev
+```
+
+If port `5173` is busy, Vite will print another URL. Open the URL Vite prints.
+
+If port `8080` is busy, run FastAPI on another port and match the frontend env var:
+
+```bash
+PYTHONPATH=src python -m uvicorn tryops.api:create_app --factory --host 0.0.0.0 --port 8082
+VITE_TRYOPS_API_BASE=http://127.0.0.1:8082 npm --prefix web run dev
+```
+
+If Docker services are confusing or stale, reset the full stack:
+
+```bash
+make app-down
+docker compose down --volumes --remove-orphans
+make app-up
+```
+
 ## Requirements
 
 Install these first:
