@@ -3,11 +3,17 @@ package main
 const schemaVersion = "tryops.native_secret_rotation_contract.v1"
 
 type Config struct {
-	RootPath       string
-	PolicyPath     string
-	ComposePath    string
-	EnvExamplePath string
-	OutputPath     string
+	RootPath           string
+	PolicyPath         string
+	ComposePath        string
+	EnvExamplePath     string
+	OutputPath         string
+	LiveVault          bool
+	VaultAddr          string
+	VaultToken         string
+	WorkloadTokenPath  string
+	LiveSecretPrefix   string
+	LiveTimeoutSeconds int
 }
 
 type Policy struct {
@@ -151,19 +157,39 @@ type SecretSummary struct {
 }
 
 type LiveReadiness struct {
-	VaultAddrConfigured bool   `json:"vault_addr_configured"`
-	TokenPathConfigured bool   `json:"token_path_configured"`
-	Mode                string `json:"mode"`
+	VaultAddrConfigured     bool   `json:"vault_addr_configured"`
+	VaultTokenConfigured    bool   `json:"vault_token_configured"`
+	TokenPathConfigured     bool   `json:"token_path_configured"`
+	TokenPathReadable       bool   `json:"token_path_readable"`
+	TokenSHA256Prefix       string `json:"token_sha256_prefix,omitempty"`
+	AuthSource              string `json:"auth_source,omitempty"`
+	Mode                    string `json:"mode"`
+	LiveExerciseRequested   bool   `json:"live_exercise_requested"`
+	LiveExercisePassed      bool   `json:"live_exercise_passed"`
+	VaultHealthOK           bool   `json:"vault_health_ok"`
+	VaultInitialized        bool   `json:"vault_initialized"`
+	VaultSealed             bool   `json:"vault_sealed"`
+	VaultVersion            string `json:"vault_version,omitempty"`
+	KVMount                 string `json:"kv_mount,omitempty"`
+	KVPathsExercised        int    `json:"kv_paths_exercised"`
+	SecretPropertiesRotated int    `json:"secret_properties_rotated"`
+	MinVersionObserved      int    `json:"min_version_observed"`
+	MaxVersionObserved      int    `json:"max_version_observed"`
+	Error                   string `json:"error,omitempty"`
 }
 
 type ReportSummary struct {
-	PassedChecks    int `json:"passed_checks"`
-	FailedChecks    int `json:"failed_checks"`
-	TotalChecks     int `json:"total_checks"`
-	ManagedSecrets  int `json:"managed_secrets"`
-	ComposeSecrets  int `json:"compose_secrets"`
-	ExternalSecrets int `json:"external_secrets"`
-	RotationMaxDays int `json:"rotation_max_days"`
+	PassedChecks           int `json:"passed_checks"`
+	FailedChecks           int `json:"failed_checks"`
+	TotalChecks            int `json:"total_checks"`
+	ManagedSecrets         int `json:"managed_secrets"`
+	ComposeSecrets         int `json:"compose_secrets"`
+	ExternalSecrets        int `json:"external_secrets"`
+	RotationMaxDays        int `json:"rotation_max_days"`
+	LiveKVPaths            int `json:"live_kv_paths"`
+	LiveSecretRotations    int `json:"live_secret_rotations"`
+	LiveMaxVersionObserved int `json:"live_max_version_observed"`
+	LiveMinVersionObserved int `json:"live_min_version_observed"`
 }
 
 type Report struct {

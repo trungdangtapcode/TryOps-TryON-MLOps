@@ -444,6 +444,9 @@ This verifies:
   hash-only API-key registry rotation, `.env.example` live identity knobs, Compose secret mounts,
   Kubernetes Vault `SecretStore`, `ExternalSecret` coverage for 8 managed secrets, a
   non-automounted runtime ServiceAccount, and a projected service-account token for Vault auth.
+  `make native-secret-rotation-live` now runs a disposable Vault 1.19 dev server and upgrades the
+  same report to `coverage_level=native_secret_rotation_live_vault_kv_rotation` with 65/65 checks,
+  5 live KV paths, 8 rotated managed-secret properties, token-file auth, and KV versioning 1..2.
 - Native Go optimization index and Console panel: `artifacts/eval/evaluation_index/evaluation_index.json`
   contains `optimization_panel` with the recommended LLM variant, leaderboard rank, Pareto-frontier
   state, per-variant VRAM/energy/SCI, and carbon-gate verdict; the React Evaluation view renders the
@@ -479,10 +482,9 @@ These remain intentionally unchecked because evidence is not strong enough yet:
 - External Alertmanager notification routing. Local Prometheus rules, Alertmanager page/ticket routing,
   inhibition, and the Go controller webhook are wired and validated; real pager/chat/ticket
   credentials still need live vault/workload-identity rotation under PA060.
-- Live Vault secret retrieval and key rotation. PA060 now has native plan-mode evidence and
-  Kubernetes manifests, but `VAULT_ADDR` plus `TRYOPS_WORKLOAD_IDENTITY_TOKEN_PATH` have not been
-  exercised against a real Vault/External Secrets deployment, so `production_ready=false` is
-  intentional.
+- Production Kubernetes External Secrets sync. PA060 now has live local Vault KV write/read/rotation
+  evidence with token-file auth, but a real cluster should still exercise the External Secrets
+  controller and Vault Kubernetes auth TokenReview flow.
 - KServe/Kubeflow live deployment. The local Kubeflow-target orchestration skeleton exists, but there is no cluster execution or pipeline upload yet.
 - Live Syft/Trivy/Cosign execution in this workspace. The GitHub Actions workflow and native CI
   contract are wired, but local `production_ready=false` because Syft, Trivy, and Cosign are not

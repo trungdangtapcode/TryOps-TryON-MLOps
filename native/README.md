@@ -285,6 +285,9 @@ Purpose:
   runtime env vars without committing secret values.
 - Verifies a non-automounted `tryops-runtime` ServiceAccount plus projected service-account token
   settings for Vault auth.
+- In live mode, starts from a workload token file and exercises Vault KV v2 health, mount bootstrap,
+  write, read, second-version rotation, and readback checks for every managed secret property under
+  a smoke prefix.
 - Emits `tryops.native_secret_rotation_contract.v1` for the Console evidence registry.
 
 Source layout:
@@ -296,15 +299,25 @@ Source layout:
 - `registry.go`: hash-only API-key registry and break-glass checks.
 - `compose.go`: Compose secret declarations, service mounts, and `.env.example` coverage.
 - `kubernetes.go`: Vault `SecretStore`, `ExternalSecret`, ServiceAccount, and projected-token checks.
+- `vault_live.go`: direct Vault HTTP client for `/sys/health`, `/sys/mounts`, and KV v2
+  write/read/rotation evidence without emitting raw secret values.
 - `report.go`, `types.go`: evidence output and summary contracts.
-- `secret_rotation_test.go`: temp-root regression coverage for the contract and invalid key hashes.
+- `secret_rotation_test.go`: temp-root regression coverage for the contract, invalid key hashes,
+  and a fake live Vault KV v2 rotation flow.
 
 Verified commands:
 
 ```bash
 make native-secret-rotation-contract-test
 make native-secret-rotation-contract-sample
+make native-secret-rotation-live
 ```
+
+`make native-secret-rotation-live` runs a disposable `hashicorp/vault:1.19` dev container, writes a
+temporary token file under `artifacts/tmp`, authenticates the native Go verifier from that token
+file, rotates all 8 managed secret properties across 5 KV paths, emits
+`coverage_level=native_secret_rotation_live_vault_kv_rotation`, and removes the container/token on
+exit.
 
 Current binary:
 

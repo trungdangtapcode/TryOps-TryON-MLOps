@@ -466,6 +466,7 @@ func summarySecretRotationContract(data map[string]interface{}) []summaryItem {
 		{Label: "production ready", Value: formatValue(data["production_ready"])},
 		{Label: "checks", Value: formatValue(summary["passed_checks"]) + "/" + formatValue(summary["total_checks"])},
 		{Label: "managed secrets", Value: formatValue(summary["managed_secrets"])},
+		{Label: "live rotations", Value: formatValue(summary["live_secret_rotations"])},
 		{Label: "mode", Value: stringField(live, "mode")},
 	}
 }

@@ -27,16 +27,16 @@
 - The VTON advanced evaluator uses native deterministic identity/fidelity proxies and a seeded
   fairness/preference fixture; production claims require a pinned neural face-embedding model,
   learned perceptual metrics, and a representative human evaluation panel.
-- The Rust quota gateway now supports optional local file durability, Postgres usage upsert
-  mirroring, Valkey-compatible counter mirroring, and hashed tenant snapshots, but distributed
-  multi-gateway atomic admission, outage policy, and restore drills still need production validation.
+- The Rust quota gateway now supports optional local file durability, Postgres distributed atomic
+  admission, Postgres usage upsert mirroring, Valkey-compatible counter mirroring, and hashed tenant
+  snapshots, but billing-ledger reconciliation and production outage policy still need validation.
 - Drift reports are generated from deterministic local sample windows, not live production request windows yet.
 - Chaos drills are deterministic local SLI-window injections, not live Kubernetes Chaos Mesh or
   LitmusChaos experiments yet.
 - Admin API-key authorization is a local least-privilege simulation with static demo keys. PA060 now
-  has native plan-mode evidence for hash-only API-key rotation, Vault/External Secrets manifests,
-  and Kubernetes workload identity, but production OIDC/JWKS plus live Vault secret fetch/rotation
-  still need to be exercised.
+  has native evidence for hash-only API-key rotation, Vault/External Secrets manifests, Kubernetes
+  workload identity, and live local Vault KV rotation, but production OIDC/JWKS and External Secrets
+  controller sync still need to be exercised.
 - A local SPDX SBOM fallback is generated, `make vulnerability-scan-sample` runs the available `npm audit` check for `web/`, and `.github/workflows/ci.yml` plus `make native-ci-contract-sample` define the Syft/Trivy/Cosign production path, but Syft, Trivy, Grype, pip-audit, gitleaks, osv-scanner, and Cosign are not installed in this workspace.
 - Model provenance uses a local DSSE-shaped digest bundle verified by native C++; real Sigstore
   keyless OIDC identity and Rekor transparency-log proof are not generated locally yet.

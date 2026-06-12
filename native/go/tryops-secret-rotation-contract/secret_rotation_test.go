@@ -1,8 +1,12 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -84,6 +88,50 @@ func TestRegistryRejectsInvalidHash(t *testing.T) {
 	}
 }
 
+func TestEvaluateLiveVaultExercise(t *testing.T) {
+	root := t.TempDir()
+	writeFixture(t, root, "token", "root-token\n")
+	server := newFakeVault(t)
+	defer server.Close()
+
+	policy := Policy{
+		Provider: ProviderPolicy{Type: "hashicorp_vault", KVMount: "kv", KubernetesAuthMount: "kubernetes", Role: "tryops-runtime"},
+		ManagedSecrets: []ManagedSecret{
+			{Name: "db", Env: "DB_PASSWORD", VaultPath: "kv/data/tryops/postgres", VaultProperty: "password", RotationDays: 30, Owner: "platform"},
+			{Name: "minio_user", Env: "MINIO_USER", VaultPath: "kv/data/tryops/minio", VaultProperty: "root_user", RotationDays: 90, Owner: "platform"},
+			{Name: "minio_password", Env: "MINIO_PASSWORD", VaultPath: "kv/data/tryops/minio", VaultProperty: "root_password", RotationDays: 30, Owner: "platform"},
+		},
+	}
+	secrets := []SecretSummary{
+		{Name: "db", VaultPath: "kv/data/tryops/postgres", VaultProperty: "password"},
+		{Name: "minio_user", VaultPath: "kv/data/tryops/minio", VaultProperty: "root_user"},
+		{Name: "minio_password", VaultPath: "kv/data/tryops/minio", VaultProperty: "root_password"},
+	}
+	cfg := Config{
+		RootPath:           root,
+		LiveVault:          true,
+		VaultAddr:          server.URL,
+		WorkloadTokenPath:  "token",
+		LiveSecretPrefix:   "tryops/live-secret-rotation",
+		LiveTimeoutSeconds: 2,
+	}
+
+	checks, live := exerciseLiveVault(cfg, policy, secrets)
+	if !allPassed(checks) {
+		t.Fatalf("expected live checks to pass: %#v", checks)
+	}
+	if !live.LiveExercisePassed || live.KVPathsExercised != 2 || live.SecretPropertiesRotated != 3 {
+		t.Fatalf("unexpected live summary: %#v", live)
+	}
+	if live.MinVersionObserved != 1 || live.MaxVersionObserved != 2 || live.AuthSource != "workload_identity_token_path" {
+		t.Fatalf("unexpected live version/auth evidence: %#v", live)
+	}
+	body, _ := json.Marshal(live)
+	if strings.Contains(string(body), "root-token") || strings.Contains(string(body), "tryops-live-") {
+		t.Fatalf("live report leaked secret material: %s", string(body))
+	}
+}
+
 func writeFixture(t *testing.T, root string, path string, body string) {
 	t.Helper()
 	full := filepath.Join(root, path)
@@ -102,6 +150,79 @@ func allPassed(checks []Check) bool {
 		}
 	}
 	return true
+}
+
+func newFakeVault(t *testing.T) *httptest.Server {
+	t.Helper()
+	mounts := map[string]bool{}
+	type versionedSecret struct {
+		version int
+		data    map[string]string
+	}
+	secrets := map[string]versionedSecret{}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/sys/health", func(w http.ResponseWriter, r *http.Request) {
+		writeJSONResponse(t, w, map[string]interface{}{"initialized": true, "sealed": false, "standby": false, "version": "fake-vault"})
+	})
+	mux.HandleFunc("/v1/sys/mounts", func(w http.ResponseWriter, r *http.Request) {
+		data := map[string]interface{}{}
+		for mount := range mounts {
+			data[mount+"/"] = map[string]interface{}{"type": "kv"}
+		}
+		writeJSONResponse(t, w, map[string]interface{}{"data": data})
+	})
+	mux.HandleFunc("/v1/sys/mounts/kv", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Vault-Token") == "" {
+			http.Error(w, "missing token", http.StatusForbidden)
+			return
+		}
+		mounts["kv"] = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("/v1/kv/data/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("X-Vault-Token") == "" {
+			http.Error(w, "missing token", http.StatusForbidden)
+			return
+		}
+		switch r.Method {
+		case http.MethodPost:
+			var payload struct {
+				Data map[string]string `json:"data"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			item := secrets[r.URL.Path]
+			item.version++
+			item.data = payload.Data
+			secrets[r.URL.Path] = item
+			writeJSONResponse(t, w, map[string]interface{}{"data": map[string]interface{}{"version": item.version}})
+		case http.MethodGet:
+			item, ok := secrets[r.URL.Path]
+			if !ok {
+				http.NotFound(w, r)
+				return
+			}
+			writeJSONResponse(t, w, map[string]interface{}{
+				"data": map[string]interface{}{
+					"data":     item.data,
+					"metadata": map[string]interface{}{"version": item.version},
+				},
+			})
+		default:
+			w.WriteHeader(http.StatusMethodNotAllowed)
+		}
+	})
+	return httptest.NewServer(mux)
+}
+
+func writeJSONResponse(t *testing.T, w http.ResponseWriter, body interface{}) {
+	t.Helper()
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(body); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func vaultStoreFixture() string {

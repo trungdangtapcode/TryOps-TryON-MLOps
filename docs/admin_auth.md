@@ -8,8 +8,9 @@ This is a control-plane contract, not a production identity provider. The produc
 OIDC/JWKS at the Rust gateway plus workload identity for runtime secrets. PA060 now adds a native
 secret-rotation contract in `native/go/tryops-secret-rotation-contract/`, Vault/External Secrets
 Kubernetes manifests under `infra/kubernetes/secret-management/`, and a hash-only API-key rotation
-policy in `configs/secret_rotation_policy.json`; it remains plan-mode evidence until exercised
-against a live Vault deployment.
+policy in `configs/secret_rotation_policy.json`. `make native-secret-rotation-live` now exercises
+live Vault KV v2 write/read/rotation locally; production cluster work remains for External Secrets
+controller sync and OIDC/JWKS identity.
 
 ## Protected Actions
 

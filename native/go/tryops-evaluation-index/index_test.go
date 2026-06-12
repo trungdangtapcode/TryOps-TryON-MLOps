@@ -266,18 +266,19 @@ func TestSummaryAlertmanagerContract(t *testing.T) {
 func TestSummarySecretRotationContract(t *testing.T) {
 	items := summarySecretRotationContract(map[string]interface{}{
 		"passed":           true,
-		"production_ready": false,
-		"coverage_level":   "native_secret_rotation_plan_contract",
+		"production_ready": true,
+		"coverage_level":   "native_secret_rotation_live_vault_kv_rotation",
 		"summary": map[string]interface{}{
-			"passed_checks":   float64(34),
-			"total_checks":    float64(34),
-			"managed_secrets": float64(8),
+			"passed_checks":         float64(65),
+			"total_checks":          float64(65),
+			"managed_secrets":       float64(8),
+			"live_secret_rotations": float64(8),
 		},
 		"live_readiness": map[string]interface{}{
-			"mode": "plan",
+			"mode": "live_vault_kv_rotation_passed",
 		},
 	})
-	if len(items) != 6 || items[3].Value != "34/34" || items[5].Value != "plan" {
+	if len(items) != 7 || items[3].Value != "65/65" || items[5].Value != "8" || items[6].Value != "live_vault_kv_rotation_passed" {
 		t.Fatalf("unexpected secret rotation summary: %#v", items)
 	}
 }

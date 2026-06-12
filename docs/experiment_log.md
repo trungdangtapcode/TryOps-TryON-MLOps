@@ -1629,9 +1629,8 @@ Date: 2026-06-11
   `automountServiceAccountToken: false`, and a projected service-account token with `audience=vault`.
   Latest local plan evidence passes 50/50 checks and is highlighted as `secret_rotation` by the
   evaluation index.
-- Notes: this partially completes PA060. `production_ready=false` is intentional until a real
-  Vault/External Secrets deployment is available and `VAULT_ADDR` plus
-  `TRYOPS_WORKLOAD_IDENTITY_TOKEN_PATH` are exercised with a live secret fetch and rotation drill.
+- Notes: this partially completed PA060 at the plan layer. The live Vault KV rotation gap is closed
+  later in EXP-092; production Kubernetes External Secrets sync remains.
 
 ## EXP-089: Native Dependency Lock Contract
 
@@ -1684,10 +1683,11 @@ Date: 2026-06-11
   `tryops_app_smoke` Compose project, recreates smoke volumes before startup, and tears them down on
   exit.
 - Notes: this closes PA072-PA086 for local/native P8 evidence. The final smoke passed 18/18
-  full-stack checks and then passed both native job-runner jobs through the Rust gateway. Live Vault
-  secret fetch/rotation, live Syft/Trivy/Cosign execution, external k6/locust confirmation,
-  external error-tracker DSN exercise, and live OTLP exporters remain production-profile work
-  rather than local P8 gaps; distributed quota validation is closed separately in EXP-091.
+  full-stack checks and then passed both native job-runner jobs through the Rust gateway. Live
+  Syft/Trivy/Cosign execution, external k6/locust confirmation, external error-tracker DSN exercise,
+  and live OTLP exporters remain production-profile work rather than local P8 gaps; distributed
+  quota validation is closed separately in EXP-091 and live Vault KV rotation is closed separately
+  in EXP-092.
 
 ## EXP-091: Distributed Native Quota Admission
 
@@ -1709,5 +1709,25 @@ Date: 2026-06-11
   started disposable Postgres plus two Rust gateway processes and passed with exactly 20/32 allowed,
   12 rejected, zero request errors, and `no_cluster_quota_oversell=true`.
 - Notes: this closes the local distributed multi-gateway quota validation gap for P6/P8. Production
-  still needs the broader live Vault rotation, live Syft/Trivy/Cosign, external k6/locust, external
-  error-tracker DSN, and live OTLP exporter exercises.
+  still needs live Syft/Trivy/Cosign, external k6/locust, external error-tracker DSN, production
+  Kubernetes External Secrets sync, and live OTLP exporter exercises.
+
+## EXP-092: Live Native Vault KV Rotation
+
+- Command: `make native-secret-rotation-contract-test`; `make native-secret-rotation-live`;
+  `make native-evaluation-index-test evaluation-index-sample`
+- Workload: PA060 live Vault-backed managed-secret retrieval and key rotation
+- Evidence files:
+  - `configs/secret_rotation_policy.json`
+  - `native/go/tryops-secret-rotation-contract/`
+  - `artifacts/eval/secrets/native_secret_rotation_contract.json`
+  - `artifacts/eval/evaluation_index/evaluation_index.json`
+- Outcome: the native Go verifier now has an explicit `--live-vault` mode. The make target starts a
+  disposable `hashicorp/vault:1.19` dev server, writes a temporary workload-token file, authenticates
+  from that file, checks `/v1/sys/health`, bootstraps the policy `kv` mount as KV v2 through
+  `/v1/sys/mounts`, writes each managed secret property under a smoke prefix, reads version 1,
+  rotates the values, reads version 2, and verifies every value changed without emitting raw secret
+  material. The final artifact passed 65/65 checks with `production_ready=true`, 5 live KV paths,
+  8 rotated secret properties, token-file auth, Vault 1.19.5 health, and version range 1..2.
+- Notes: this closes the local live Vault secret fetch/rotation gap. A production Kubernetes cluster
+  should still exercise the External Secrets controller and Kubernetes auth TokenReview flow.

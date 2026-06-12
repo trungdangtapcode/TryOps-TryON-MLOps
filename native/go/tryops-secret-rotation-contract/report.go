@@ -32,13 +32,25 @@ func evaluate(cfg Config) (Report, error) {
 	checks = append(checks, kubeChecks...)
 
 	secrets := summarizeSecrets(policy, composePresent, kubeSummary.externalEnv)
+	live := liveReadiness(cfg)
+	if cfg.LiveVault {
+		liveChecks, updatedLive := exerciseLiveVault(cfg, policy, secrets)
+		checks = append(checks, liveChecks...)
+		live = updatedLive
+	}
 	passedChecks, failedChecks := countChecks(checks)
-	live := liveReadiness()
 	passed := failedChecks == 0
-	productionReady := passed && live.VaultAddrConfigured && live.TokenPathConfigured
+	productionReady := passed && live.LiveExercisePassed && live.TokenPathReadable
 	coverage := "native_secret_rotation_plan_contract"
-	if productionReady {
-		coverage = "native_secret_rotation_live_identity_ready"
+	if live.LiveExerciseRequested {
+		coverage = "native_secret_rotation_live_vault_kv_rotation"
+	}
+	notes := []string{
+		"No Vault token or secret value is stored in Git or emitted in the report.",
+		"Plan mode proves manifests and policy. Live mode uses the Vault HTTP API to write, read, and rotate the managed KV v2 secret properties.",
+	}
+	if !live.LiveExercisePassed {
+		notes = append(notes, "production_ready is false until --live-vault succeeds with a readable workload identity token path.")
 	}
 	return Report{
 		SchemaVersion:   schemaVersion,
@@ -74,18 +86,19 @@ func evaluate(cfg Config) (Report, error) {
 			{Name: "kubernetes_secret_management", Path: "infra/kubernetes/secret-management", Status: status(kubeSummary.secretStore && kubeSummary.projectedToken), Detail: "External Secrets plus projected service-account token manifests"},
 		},
 		Research: researchRefs(),
-		Notes: []string{
-			"This is plan-mode evidence; no Vault token or secret value is stored in Git.",
-			"production_ready is false until VAULT_ADDR and TRYOPS_WORKLOAD_IDENTITY_TOKEN_PATH are configured in a live environment.",
-		},
+		Notes:    notes,
 		Summary: ReportSummary{
-			PassedChecks:    passedChecks,
-			FailedChecks:    failedChecks,
-			TotalChecks:     len(checks),
-			ManagedSecrets:  len(policy.ManagedSecrets),
-			ComposeSecrets:  countComposeSecrets(secrets),
-			ExternalSecrets: countExternalSecrets(secrets),
-			RotationMaxDays: rotationMax(policy),
+			PassedChecks:           passedChecks,
+			FailedChecks:           failedChecks,
+			TotalChecks:            len(checks),
+			ManagedSecrets:         len(policy.ManagedSecrets),
+			ComposeSecrets:         countComposeSecrets(secrets),
+			ExternalSecrets:        countExternalSecrets(secrets),
+			RotationMaxDays:        rotationMax(policy),
+			LiveKVPaths:            live.KVPathsExercised,
+			LiveSecretRotations:    live.SecretPropertiesRotated,
+			LiveMaxVersionObserved: live.MaxVersionObserved,
+			LiveMinVersionObserved: live.MinVersionObserved,
 		},
 	}, nil
 }
@@ -108,14 +121,39 @@ func summarizeSecrets(policy Policy, composePresent map[string]bool, externalEnv
 	return secrets
 }
 
-func liveReadiness() LiveReadiness {
-	vault := os.Getenv("VAULT_ADDR") != ""
-	token := os.Getenv("TRYOPS_WORKLOAD_IDENTITY_TOKEN_PATH") != ""
+func liveReadiness(cfg Config) LiveReadiness {
+	vault := cfg.VaultAddr != ""
+	vaultToken := cfg.VaultToken != ""
+	token := cfg.WorkloadTokenPath != ""
+	tokenReadable := false
+	tokenSHA := ""
+	authSource := ""
+	if token {
+		if body, err := os.ReadFile(joinRoot(cfg.RootPath, cfg.WorkloadTokenPath)); err == nil && len(body) > 0 {
+			tokenReadable = true
+			tokenSHA = sha256Prefix(body)
+			authSource = "workload_identity_token_path"
+		}
+	}
+	if authSource == "" && vaultToken {
+		authSource = "VAULT_TOKEN"
+	}
 	mode := "plan"
-	if vault && token {
+	if cfg.LiveVault {
+		mode = "live_vault_requested"
+	} else if vault && token {
 		mode = "live_identity_configured"
 	}
-	return LiveReadiness{VaultAddrConfigured: vault, TokenPathConfigured: token, Mode: mode}
+	return LiveReadiness{
+		VaultAddrConfigured:   vault,
+		VaultTokenConfigured:  vaultToken,
+		TokenPathConfigured:   token,
+		TokenPathReadable:     tokenReadable,
+		TokenSHA256Prefix:     tokenSHA,
+		AuthSource:            authSource,
+		Mode:                  mode,
+		LiveExerciseRequested: cfg.LiveVault,
+	}
 }
 
 func countChecks(checks []Check) (int, int) {
@@ -165,6 +203,9 @@ func check(name string, passed bool, detail string) Check {
 func researchRefs() []ResearchRef {
 	return []ResearchRef{
 		{Name: "HashiCorp Vault Kubernetes auth", URL: "https://developer.hashicorp.com/vault/docs/auth/kubernetes", Use: "Vault auth role bound to Kubernetes service-account identity"},
+		{Name: "HashiCorp Vault sys mounts API", URL: "https://developer.hashicorp.com/vault/api-docs/system/mounts", Use: "live readiness bootstrap for the policy KV v2 mount"},
+		{Name: "HashiCorp Vault KV v2 API", URL: "https://developer.hashicorp.com/vault/api-docs/secret/kv/kv-v2", Use: "live write/read/rotation of versioned managed secrets"},
+		{Name: "HashiCorp Vault sys health API", URL: "https://developer.hashicorp.com/vault/api-docs/system/health", Use: "live Vault readiness and unsealed-state check"},
 		{Name: "Kubernetes service accounts", URL: "https://kubernetes.io/docs/tasks/configure-pod-container/configure-service-account/", Use: "projected short-lived service-account token contract"},
 		{Name: "External Secrets Operator Vault provider", URL: "https://external-secrets.io/latest/provider/hashicorp-vault/", Use: "Vault-backed ExternalSecret sync into runtime Kubernetes secrets"},
 		{Name: "SPIFFE/SPIRE workload identity", URL: "https://spiffe.io/docs/latest/spiffe-about/overview/", Use: "future cryptographic workload identity and SVID direction"},

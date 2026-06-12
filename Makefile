@@ -10,6 +10,9 @@ GGUF_MODEL_URL ?= https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/re
 LLAMA_CLI ?= llama-cli
 VLLM_BASE_URL ?= http://127.0.0.1:8000/v1
 VLLM_MODEL ?= HuggingFaceTB/SmolLM2-135M-Instruct
+TRYOPS_VAULT_IMAGE ?= hashicorp/vault:1.19
+TRYOPS_VAULT_PORT ?= 18200
+TRYOPS_VAULT_DEV_TOKEN ?= tryops-dev-root-token
 
 .PHONY: native-gguf-preflight-build native-gguf-preflight-test llm-gguf-preflight-sample
 .PHONY: native-trace-envelope-cpp-build native-trace-envelope-cpp-test native-trace-envelope-build native-trace-envelope-test native-trace-envelope-sample
@@ -20,7 +23,7 @@ VLLM_MODEL ?= HuggingFaceTB/SmolLM2-135M-Instruct
 .PHONY: native-observability-contract-build native-observability-contract-test native-observability-contract-sample
 .PHONY: native-alertmanager-contract-build native-alertmanager-contract-test native-alertmanager-contract-sample
 .PHONY: native-incident-workflow-build native-incident-workflow-test native-incident-workflow-sample
-.PHONY: native-secret-rotation-contract-build native-secret-rotation-contract-test native-secret-rotation-contract-sample
+.PHONY: native-secret-rotation-contract-build native-secret-rotation-contract-test native-secret-rotation-contract-sample native-secret-rotation-live
 .PHONY: native-dependency-lock-contract-build native-dependency-lock-contract-test native-dependency-lock-contract-sample
 .PHONY: native-db-migrator-build native-db-migrator-test native-db-migrator-sample native-db-migrator-apply
 .PHONY: native-backup-restore-build native-backup-restore-test native-backup-restore-sample native-backup-restore-live
@@ -789,6 +792,34 @@ native-secret-rotation-contract-test:
 
 native-secret-rotation-contract-sample: native-secret-rotation-contract-build
 	artifacts/native/tryops_secret_rotation_contract --root . --output artifacts/eval/secrets/native_secret_rotation_contract.json
+
+native-secret-rotation-live: native-secret-rotation-contract-build
+	@if ! command -v docker >/dev/null 2>&1; then \
+		echo "docker is required for native-secret-rotation-live"; \
+		exit 1; \
+	fi
+	@set -eu; \
+	name=tryops_vault_live; \
+	port="$(TRYOPS_VAULT_PORT)"; \
+	token="$(TRYOPS_VAULT_DEV_TOKEN)"; \
+	image="$(TRYOPS_VAULT_IMAGE)"; \
+	token_path="$(CURDIR)/artifacts/tmp/vault-workload-token"; \
+	mkdir -p "$(CURDIR)/artifacts/tmp"; \
+	printf "%s\n" "$$token" > "$$token_path"; \
+	chmod 600 "$$token_path"; \
+	docker rm -f "$$name" >/dev/null 2>&1 || true; \
+	cleanup() { docker rm -f "$$name" >/dev/null 2>&1 || true; rm -f "$$token_path"; }; \
+	trap cleanup EXIT; \
+	docker run -d --name "$$name" --cap-add=IPC_LOCK \
+		-p "127.0.0.1:$$port:8200" \
+		-e "VAULT_DEV_ROOT_TOKEN_ID=$$token" \
+		-e "VAULT_DEV_LISTEN_ADDRESS=0.0.0.0:8200" \
+		"$$image" >/dev/null; \
+	artifacts/native/tryops_secret_rotation_contract --root . \
+		--live-vault \
+		--vault-addr "http://127.0.0.1:$$port" \
+		--token-path "$$token_path" \
+		--output artifacts/eval/secrets/native_secret_rotation_contract.json
 
 native-dependency-lock-contract-build:
 	mkdir -p artifacts/native
