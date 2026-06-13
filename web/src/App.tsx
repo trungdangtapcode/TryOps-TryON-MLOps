@@ -45,8 +45,11 @@ import type {
 
 const API_KEY_STORAGE = "tryops.console.api_key";
 const ACCOUNT_ID_STORAGE = "tryops.console.account_id";
+const ACCOUNT_JOB_CACHE_STORAGE = "tryops.console.account_jobs";
 
 export function App() {
+  const initialAccountId = useMemo(() => localStorage.getItem(ACCOUNT_ID_STORAGE) ?? "", []);
+  const initialJobCache = useMemo(() => loadStoredAccountJobs(initialAccountId), [initialAccountId]);
   const [activeView, setActiveView] = useState<ViewKey>("vton");
   const [apiKey, setApiKey] = useState("");
   const [devApiKeyEnabled, setDevApiKeyEnabled] = useState(false);
@@ -61,13 +64,13 @@ export function App() {
   const [quota, setQuota] = useState<QuotaReadModel | undefined>();
   const [accountDashboard, setAccountDashboard] = useState<AccountDashboard | undefined>();
   const [accountQuota, setAccountQuota] = useState<AccountQuota | undefined>();
-  const [accountJobs, setAccountJobs] = useState<VtonJobRecord[]>([]);
-  const [accountJobConcurrency, setAccountJobConcurrency] = useState<JobConcurrency | undefined>();
+  const [accountJobs, setAccountJobs] = useState<VtonJobRecord[]>(initialJobCache.jobs);
+  const [accountJobConcurrency, setAccountJobConcurrency] = useState<JobConcurrency | undefined>(initialJobCache.concurrency);
   const [accountMembers, setAccountMembers] = useState<AccountMember[]>([]);
   const [accountInvitations, setAccountInvitations] = useState<AccountInvitation[]>([]);
   const [session, setSession] = useState<AuthSession | undefined>();
   const [lastError, setLastError] = useState<string | undefined>();
-  const [selectedAccountId, setSelectedAccountIdState] = useState(() => localStorage.getItem(ACCOUNT_ID_STORAGE) ?? "");
+  const [selectedAccountId, setSelectedAccountIdState] = useState(initialAccountId);
 
   const activeApiKey = devApiKeyEnabled ? apiKey : "";
   const client = useMemo(
@@ -144,6 +147,10 @@ export function App() {
       return;
     }
 
+    if (token?.accessToken && !authConfig) {
+      return;
+    }
+
     if (!authenticated) {
       setSession(undefined);
       setAccountDashboard(undefined);
@@ -179,8 +186,11 @@ export function App() {
         setAccountQuota(accountOutcomes[1].value);
       }
       if (accountOutcomes[2].status === "fulfilled") {
-        setAccountJobs(accountOutcomes[2].value.data ?? []);
-        setAccountJobConcurrency(accountOutcomes[2].value.concurrency);
+        const nextJobs = accountOutcomes[2].value.data ?? [];
+        const nextConcurrency = accountOutcomes[2].value.concurrency;
+        setAccountJobs(nextJobs);
+        setAccountJobConcurrency(nextConcurrency);
+        storeAccountJobs(accountOutcomes[2].value.account.id, nextJobs, nextConcurrency);
       }
       if (accountOutcomes[3].status === "fulfilled") {
         setAccountMembers(accountOutcomes[3].value);
@@ -255,8 +265,11 @@ export function App() {
   }
 
   useEffect(() => {
+    if (token?.accessToken && !authConfig) {
+      return;
+    }
     void refreshConsole();
-  }, [client, authenticated]);
+  }, [authConfig, client, authenticated, token?.accessToken]);
 
   useEffect(() => {
     if (!authenticated || accountJobs.length === 0) {
@@ -318,6 +331,7 @@ export function App() {
       setApiKey("");
       localStorage.removeItem(API_KEY_STORAGE);
       localStorage.removeItem(ACCOUNT_ID_STORAGE);
+      localStorage.removeItem(ACCOUNT_JOB_CACHE_STORAGE);
       setSelectedAccountIdState("");
   }
 
@@ -328,6 +342,9 @@ export function App() {
     } else {
       localStorage.removeItem(ACCOUNT_ID_STORAGE);
     }
+    const cached = loadStoredAccountJobs(value);
+    setAccountJobs(cached.jobs);
+    setAccountJobConcurrency(cached.concurrency);
   }
 
   async function createWorkspace(payload: { name: string; description?: string }) {
@@ -507,4 +524,51 @@ function isUnauthorizedSessionError(error: unknown): boolean {
     return false;
   }
   return /Unauthorized|auth_preflight_failed|missing_api_key|invalid_jwt|expired_jwt/.test(error.message);
+}
+
+function loadStoredAccountJobs(accountId: string): { jobs: VtonJobRecord[]; concurrency?: JobConcurrency } {
+  if (!accountId) {
+    return { jobs: [] };
+  }
+  try {
+    const raw = localStorage.getItem(ACCOUNT_JOB_CACHE_STORAGE);
+    if (!raw) {
+      return { jobs: [] };
+    }
+    const cache = JSON.parse(raw) as {
+      accountId?: string;
+      jobs?: VtonJobRecord[];
+      concurrency?: JobConcurrency;
+      storedAt?: number;
+    };
+    if (cache.accountId !== accountId || !Array.isArray(cache.jobs)) {
+      return { jobs: [] };
+    }
+    return {
+      jobs: cache.jobs.slice(0, 20),
+      concurrency: cache.concurrency
+    };
+  } catch {
+    localStorage.removeItem(ACCOUNT_JOB_CACHE_STORAGE);
+    return { jobs: [] };
+  }
+}
+
+function storeAccountJobs(accountId: string, jobs: VtonJobRecord[], concurrency?: JobConcurrency): void {
+  if (!accountId) {
+    return;
+  }
+  try {
+    localStorage.setItem(
+      ACCOUNT_JOB_CACHE_STORAGE,
+      JSON.stringify({
+        accountId,
+        jobs: jobs.slice(0, 20),
+        concurrency,
+        storedAt: Date.now()
+      })
+    );
+  } catch {
+    return;
+  }
 }
