@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, Search, Send, Trash2, UserPlus, UsersRound } from "lucide-react";
 import type { TryOpsClient } from "../api";
-import { requestRecordsToVtonJobs } from "../jobRecords";
 import type {
   AccountDashboard,
   AccountInvitation,
@@ -56,7 +55,7 @@ export function AccountDashboardView({
 }: AccountDashboardViewProps) {
   const account = dashboard?.account ?? quota?.account;
   const recent = dashboard?.recent_requests ?? [];
-  const visibleJobs = jobs.length > 0 ? jobs : requestRecordsToVtonJobs(recent);
+  const visibleJobs = jobs.filter((job) => job.status === "accepted" || job.status === "queued" || job.status === "running");
   const canManage = Boolean(session?.permissions.can_manage_account);
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceDescription, setWorkspaceDescription] = useState("");
@@ -156,7 +155,7 @@ export function AccountDashboardView({
               {jobConcurrency.plan} plan capacity · {jobConcurrency.remaining} slot{jobConcurrency.remaining === 1 ? "" : "s"} available · {jobConcurrency.global_workers ?? 1} global worker{jobConcurrency.global_workers === 1 ? "" : "s"}
             </p>
           ) : null}
-          <JobStatusList client={client} jobs={visibleJobs} emptyText="No try-on jobs in this workspace yet." />
+          <JobStatusList client={client} jobs={visibleJobs} emptyText="No active try-on jobs in this workspace." />
         </section>
 
         <section className="panel account-quota-panel">

@@ -175,7 +175,7 @@ export function App() {
       const accountOutcomes = await Promise.allSettled([
         requestClient.accountDashboard(),
         requestClient.accountQuota(),
-        requestClient.accountJobs("all", 20),
+        requestClient.accountJobs("active", 20),
         requestClient.accountMembers(),
         activeAccountId ? requestClient.accountInvitations(activeAccountId) : Promise.resolve([])
       ]);
@@ -545,7 +545,7 @@ function loadStoredAccountJobs(accountId: string): { jobs: VtonJobRecord[]; conc
       return { jobs: [] };
     }
     return {
-      jobs: cache.jobs.slice(0, 20),
+      jobs: cache.jobs.filter(isActiveJobRecord).slice(0, 20),
       concurrency: cache.concurrency
     };
   } catch {
@@ -563,7 +563,7 @@ function storeAccountJobs(accountId: string, jobs: VtonJobRecord[], concurrency?
       ACCOUNT_JOB_CACHE_STORAGE,
       JSON.stringify({
         accountId,
-        jobs: jobs.slice(0, 20),
+        jobs: jobs.filter(isActiveJobRecord).slice(0, 20),
         concurrency,
         storedAt: Date.now()
       })
@@ -571,4 +571,8 @@ function storeAccountJobs(accountId: string, jobs: VtonJobRecord[], concurrency?
   } catch {
     return;
   }
+}
+
+function isActiveJobRecord(job: VtonJobRecord): boolean {
+  return job.status === "accepted" || job.status === "queued" || job.status === "running";
 }

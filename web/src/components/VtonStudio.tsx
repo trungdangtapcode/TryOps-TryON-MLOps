@@ -3,7 +3,6 @@ import { ImagePlus, Loader2, Play, Settings2, UploadCloud } from "lucide-react";
 import type { TryOpsClient } from "../api";
 import { quotaPlans, vtonAliases } from "../data";
 import { compactJson } from "../format";
-import { requestRecordsToVtonJobs } from "../jobRecords";
 import type { JobConcurrency, RequestRecord, VtonJobRecord, VtonResponse } from "../types";
 import { isActiveVtonJob, JobStatusList } from "./JobStatusList";
 import { MetricTile } from "./MetricTile";
@@ -52,10 +51,9 @@ export function VtonStudio({
   const hasRequiredAssets = hasPersonAsset && hasGarmentAsset;
   const runOutputPath = vtonOutputPath(result, outputPath);
   const runOutputUrl = client.artifactUrl(runOutputPath);
-  const requestHistoryJobs = useMemo(() => requestRecordsToVtonJobs(recentRequests), [recentRequests]);
   const visibleJobs = useMemo(
-    () => mergeJobs([...requestHistoryJobs, ...activeJobs], trackedJob),
-    [activeJobs, requestHistoryJobs, trackedJob]
+    () => mergeJobs(activeJobs, trackedJob).filter(isActiveVtonJob),
+    [activeJobs, trackedJob]
   );
   const activeJobCount = visibleJobs.filter(isActiveVtonJob).length;
   const concurrencyActive = Math.max(jobConcurrency?.active ?? 0, activeJobCount);
@@ -484,7 +482,7 @@ export function VtonStudio({
             {jobConcurrency.plan} plan capacity · {concurrencyRemaining ?? jobConcurrency.remaining} slot{(concurrencyRemaining ?? jobConcurrency.remaining) === 1 ? "" : "s"} available · {jobConcurrency.global_workers ?? 1} global worker{jobConcurrency.global_workers === 1 ? "" : "s"}
           </p>
         ) : null}
-        <JobStatusList client={client} jobs={visibleJobs} emptyText="No try-on jobs yet." />
+        <JobStatusList client={client} jobs={visibleJobs} emptyText="No active try-on jobs." />
       </section>
       <section className="fashion-saved-looks" aria-label="Saved looks">
         <div className="fashion-saved-heading">
