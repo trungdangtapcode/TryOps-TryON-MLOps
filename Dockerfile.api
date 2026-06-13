@@ -4,7 +4,7 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src ./src
 COPY configs ./configs
-RUN pip install --no-cache-dir fastapi uvicorn prometheus-client
+RUN pip install --no-cache-dir fastapi uvicorn prometheus-client psycopg2-binary
 ENV PYTHONPATH=/app/src
 EXPOSE 8080
 RUN addgroup --system tryops && adduser --system --ingroup tryops --home /nonexistent --no-create-home tryops

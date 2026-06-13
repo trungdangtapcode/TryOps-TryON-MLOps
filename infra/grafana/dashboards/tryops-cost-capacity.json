@@ -112,12 +112,12 @@
       "id": 4,
       "targets": [
         {
-          "expr": "sum(increase(tryops_api_requests_total[24h])) by (workload, model_alias)",
+          "expr": "sum(tryops_persisted_requests_total) by (workload, model_alias)",
           "legendFormat": "{{workload}} {{model_alias}}",
           "refId": "A"
         }
       ],
-      "title": "Daily Request Volume",
+      "title": "Persisted Request Volume",
       "type": "timeseries"
     },
     {
@@ -140,12 +140,12 @@
       "id": 5,
       "targets": [
         {
-          "expr": "sum(increase(tryops_llm_tokens_total[24h])) by (model_alias)",
+          "expr": "sum(tryops_llm_tokens_total) by (model_alias)",
           "legendFormat": "{{model_alias}} tokens",
           "refId": "A"
         }
       ],
-      "title": "Daily LLM Token Volume",
+      "title": "LLM Token Usage",
       "type": "timeseries"
     },
     {
@@ -162,7 +162,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "| Metric | Local evidence source | Production source |\n| --- | --- | --- |\n| Unit economics | artifacts/eval/finops/unit_economics.json | tryops_request_cost_usd |\n| Budget showback | artifacts/eval/finops/budget_showback.json | tryops_budget_utilization_ratio |\n| Semantic cache | artifacts/eval/finops/semantic_cache_report.json | tryops_semantic_cache_requests_total |\n| Quota utilization | artifacts/eval/quota/quota_usage.json | tryops_quota_used / tryops_quota_limit |\n| Capacity pressure | artifacts/eval/vton_jobs/job.json | tryops_async_job_queue_depth |\n| Energy and CO2e | artifacts/eval/energy/energy_sweep.json | tryops_energy_wh_per_1k_tokens / tryops_co2e_g_per_1k_tokens |\n| Cost vs energy | artifacts/eval/energy/energy_sweep.json + artifacts/eval/finops/finops_report.json | tryops_request_cost_usd and tryops_energy_wh_per_1k_tokens |",
+        "content": "| Metric | Local evidence source | Production source |\n| --- | --- | --- |\n| Unit economics | artifacts/eval/finops/unit_economics.json | tryops_request_cost_usd |\n| Budget showback | artifacts/eval/finops/budget_showback.json | tryops_budget_utilization_ratio |\n| Semantic cache | artifacts/eval/finops/semantic_cache_report.json | tryops_semantic_cache_requests_total |\n| Quota utilization | artifacts/eval/quota/quota_usage.json | tryops_quota_used / tryops_quota_limit |\n| Capacity pressure | artifacts/eval/vton_jobs/job.json | tryops_async_job_queue_depth |\n| Persisted volume | Postgres requests table | tryops_persisted_requests_total |\n| Energy | Postgres requests.energy_wh when available | tryops_energy_wh_total |",
         "mode": "markdown"
       },
       "title": "Cost and Capacity Evidence Map",
@@ -188,7 +188,7 @@
       "id": 7,
       "targets": [
         {
-          "expr": "sum(increase(tryops_semantic_cache_requests_total{result=\"hit\"}[24h])) / clamp_min(sum(increase(tryops_semantic_cache_requests_total[24h])), 1)",
+          "expr": "(sum(increase(tryops_semantic_cache_requests_total{result=\"hit\"}[24h])) / clamp_min(sum(increase(tryops_semantic_cache_requests_total[24h])), 1)) or vector(0)",
           "legendFormat": "hit rate",
           "refId": "A"
         }
@@ -216,7 +216,7 @@
       "id": 8,
       "targets": [
         {
-          "expr": "sum(increase(tryops_semantic_cache_savings_total{unit=\"cost_usd\"}[24h]))",
+          "expr": "sum(increase(tryops_semantic_cache_savings_total{unit=\"cost_usd\"}[24h])) or vector(0)",
           "legendFormat": "daily cache savings",
           "refId": "A"
         }
@@ -272,12 +272,12 @@
       "id": 10,
       "targets": [
         {
-          "expr": "max(tryops_energy_wh_per_1k_tokens) by (workload, model_alias, variant)",
-          "legendFormat": "{{workload}} {{model_alias}} {{variant}}",
+          "expr": "sum(tryops_energy_wh_total) by (workload, model_alias) or vector(0)",
+          "legendFormat": "{{workload}} {{model_alias}}",
           "refId": "A"
         }
       ],
-      "title": "Energy per 1k Tokens",
+      "title": "Observed Energy Total",
       "type": "bargauge"
     },
     {
@@ -300,12 +300,12 @@
       "id": 11,
       "targets": [
         {
-          "expr": "max(tryops_co2e_g_per_1k_tokens) by (workload, model_alias, variant)",
-          "legendFormat": "{{workload}} {{model_alias}} {{variant}}",
+          "expr": "(sum(tryops_energy_wh_total) by (workload, model_alias) * 0.475) or vector(0)",
+          "legendFormat": "{{workload}} {{model_alias}}",
           "refId": "A"
         }
       ],
-      "title": "CO2e per 1k Tokens",
+      "title": "Estimated CO2e From Energy",
       "type": "bargauge"
     },
     {
@@ -333,12 +333,12 @@
           "refId": "A"
         },
         {
-          "expr": "max(tryops_energy_wh_per_1k_tokens) by (model_alias, variant)",
-          "legendFormat": "{{model_alias}} {{variant}} Wh/1k",
+          "expr": "sum(tryops_energy_wh_total) by (model_alias) or vector(0)",
+          "legendFormat": "{{model_alias}} Wh observed",
           "refId": "B"
         }
       ],
-      "title": "Cost vs Energy Correlation",
+      "title": "Cost vs Observed Energy",
       "type": "timeseries"
     }
   ],

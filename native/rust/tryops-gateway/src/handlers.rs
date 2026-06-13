@@ -583,8 +583,19 @@ async fn proxy_api(
     if let Some(principal) = auth_principal {
         request = request
             .header("x-tryops-auth-key-id", principal.key_id)
+            .header("x-tryops-auth-subject", principal.subject)
+            .header("x-tryops-auth-provider", principal.provider)
             .header("x-tryops-auth-role", principal.role)
             .header("x-tryops-auth-scopes", principal.scopes.join(" "));
+        if let Some(email) = principal.email {
+            request = request.header("x-tryops-auth-email", email);
+        }
+        if let Some(username) = principal.username {
+            request = request.header("x-tryops-auth-username", username);
+        }
+        if let Some(display_name) = principal.display_name {
+            request = request.header("x-tryops-auth-display-name", display_name);
+        }
     }
     request = add_edge_cache_headers(request, cache_admission.as_ref());
 
@@ -753,6 +764,10 @@ fn record_gateway_proxy_request(
     }
     if let Some(path) = &state.structured_log_path {
         let envelope = envelope.clone().with_outcome(status.as_u16(), elapsed_ms);
+        let _guard = state
+            .structured_log_lock
+            .lock()
+            .expect("structured log mutex poisoned");
         if let Err(error) = append_gateway_structured_log(path, &envelope) {
             tracing::warn!(path = path.as_str(), error = %error, "gateway structured log write failed");
         }
@@ -772,7 +787,8 @@ fn append_gateway_structured_log(
         .append(true)
         .open(path)
         .map_err(|error| error.to_string())?;
-    serde_json::to_writer(&mut file, envelope).map_err(|error| error.to_string())?;
-    file.write_all(b"\n").map_err(|error| error.to_string())?;
+    let mut line = serde_json::to_vec(envelope).map_err(|error| error.to_string())?;
+    line.push(b'\n');
+    file.write_all(&line).map_err(|error| error.to_string())?;
     Ok(())
 }

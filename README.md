@@ -12,13 +12,35 @@ Start the local product stack:
 make app-up
 ```
 
+The first run may take longer because it prepares the FASHN VTON runtime and model weights. Later runs reuse the cached setup.
+
 Open the Console:
 
 ```text
 http://127.0.0.1:18081
 ```
 
-Use a demo API key:
+Create an account:
+
+1. Click **Sign up** in the TryOps UI.
+2. Register through Keycloak.
+3. After login, TryOps bootstraps your workspace account automatically.
+4. Open **My Account** to see quota, usage, members, and recent try-ons.
+
+Keycloak is included in `make app-up`:
+
+```text
+http://127.0.0.1:18082
+```
+
+Local Keycloak admin login:
+
+```text
+username: tryops-admin
+password: tryops-local-keycloak
+```
+
+The old static demo API keys still exist only as a local/dev fallback. Open the settings menu and paste one if you want to bypass login while debugging:
 
 ```text
 tryops-viewer-demo-key
@@ -31,37 +53,74 @@ curl -fsS http://127.0.0.1:18081/api/health
 make app-smoke
 ```
 
-Stop it:
+Stop it and free the model-service RAM:
 
 ```bash
 make app-down
 ```
 
-### Real VTON Model
-
-The production VTON target uses the open-source FASHN VTON v1.5 model. It runs as a host GPU service, then the Docker app calls it through `host.docker.internal`.
-
-One-time setup:
+For hot reload while editing the app:
 
 ```bash
-make fashn-vton-download
+make app-up-hotreload
 ```
 
-Start the model service in one terminal:
+Then open the Vite dev UI:
+
+```text
+http://127.0.0.1:18173
+```
+
+Hot reload mode keeps the Rust gateway/API edge on `http://127.0.0.1:18081`, starts the React dev server on `18173`, and runs FastAPI with `uvicorn --reload`. Use normal `make app-up` again when you want the production-style static build served by the gateway.
+
+`make app-up --hotreload` is not valid GNU Make syntax because `--hotreload` is parsed as a Make option before the project Makefile can handle it. Use `make app-up-hotreload`, or the explicit flag form `TRYOPS_HOT_RELOAD=1 make app-up`.
+
+Running `make app-up` again is safe. It reuses or recreates the Compose services in place, keeps persistent volumes, and removes the dev-only Vite container if you are switching back from hot reload. It does not wipe Postgres, MinIO, Grafana, or Valkey data. Docker build cache can grow after many rebuilds; reclaim only cache and dangling images with:
 
 ```bash
+make app-prune-build-cache
+```
+
+### Accounts, IAM, And Quota
+
+TryOps uses Keycloak for signup/login and the Rust gateway validates Keycloak access tokens before forwarding trusted identity headers to the API. On first login, the API creates one workspace account for that user in Postgres.
+
+Useful Postgres tables:
+
+| Table | What it stores |
+| --- | --- |
+| `accounts` | Workspace account, plan, status |
+| `account_members` | Keycloak subject, email, display name, role |
+| `requests` | LLM/VTON request history with `account_id` |
+| `tryops_quota_usage` | Account-pooled quota ledger using the account as the quota subject |
+
+MLflow tables such as `runs` are only populated by MLflow experiment runs. Product usage appears in `requests`, not MLflow `runs`.
+
+### Real VTON Model
+
+The production VTON target uses the open-source FASHN VTON v1.5 model. `make app-up` prepares the model runtime if needed, starts the FASHN service in the background on port `18101`, then starts the Docker app. Docker reaches the model through `host.docker.internal`.
+
+The local FASHN loader is patched at startup to avoid the worst host-RAM spike: it builds the large model on PyTorch `meta`, loads safetensors directly to CUDA, and assigns those GPU tensors into the module before inference. This is enabled by default with `FASHN_VTON_GPU_FIRST_LOAD=1`; set `FASHN_VTON_GPU_FIRST_LOAD=0 make app-up` only if you need to debug the original vendor loading path.
+
+For troubleshooting only, these advanced commands control just the model service:
+
+```bash
+make fashn-vton-service-bg
+make fashn-vton-stop
 make fashn-vton-service
 ```
 
-This binds the model service on port `18101` so Docker can reach it through `host.docker.internal`.
+Then open `http://127.0.0.1:18081`, sign up or log in, go to VTON Studio, upload a person image and garment image, keep `FASHN VTON 1.5 GPU` selected, and press Generate. The generated image is saved under your account workspace, for example `artifacts/runtime/vton/accounts/<account_id>/<request_id>.png`.
 
-Start the app in another terminal:
+VTON jobs are concurrency-limited by workspace plan so one account cannot flood the model queue:
 
-```bash
-make app-up
-```
+| Plan | Default active VTON jobs |
+| --- | ---: |
+| `free` | 1 |
+| `team` | 2 |
+| `enterprise` | 4 |
 
-Then open `http://127.0.0.1:18081`, enter `tryops-viewer-demo-key`, go to VTON Studio, upload a person image and garment image, keep `FASHN VTON 1.5 GPU` selected, and press Run. The generated image is saved to the output path shown in the UI, usually `artifacts/runtime/vton/console-output.png`.
+Override these with `TRYOPS_VTON_CONCURRENCY_FREE`, `TRYOPS_VTON_CONCURRENCY_TEAM`, and `TRYOPS_VTON_CONCURRENCY_ENTERPRISE`. Actual simultaneous execution is also capped by `TRYOPS_VTON_JOB_WORKERS`, which defaults to `1` locally to reduce RAM/VRAM risk.
 
 Quick local model check without the app:
 
@@ -69,7 +128,7 @@ Quick local model check without the app:
 make fashn-vton-sample
 ```
 
-For frontend development:
+For manual frontend development without Docker hot reload:
 
 ```bash
 python -m pip install -e ".[dev]"
@@ -206,8 +265,7 @@ Real model runs are optional and need ML extras plus suitable hardware:
 
 ```bash
 python -m pip install -e ".[dev,ml]"
-make fashn-vton-download
-make fashn-vton-service
+make app-up
 make llm-real-sample
 ```
 
@@ -274,7 +332,7 @@ flowchart LR
   end
 
   subgraph profiles["Profile-only"]
-    controller["18082<br/>Go controller ops profile"]
+    controller["18084<br/>Go controller ops profile"]
     tls["8443<br/>Gateway TLS profile"]
     assets["8088<br/>Web assets profile"]
   end
@@ -315,6 +373,8 @@ When using `make app-up`:
 
 ```text
 Console + gateway: http://127.0.0.1:18081
+Keycloak IAM:      http://127.0.0.1:18082
+Hot reload UI:    http://127.0.0.1:18173
 FastAPI direct:    http://127.0.0.1:18080
 FASHN VTON model:  http://127.0.0.1:18101
 Grafana:           http://127.0.0.1:13000

@@ -34,7 +34,7 @@
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -47,13 +47,13 @@
       "id": 1,
       "targets": [
         {
-          "expr": "tryops_llm_quality_score",
-          "legendFormat": "LLM quality",
+          "expr": "sum(tryops_persisted_requests_total{workload=\"llm\",status=\"completed\"}) by (model_alias)",
+          "legendFormat": "{{model_alias}} completed",
           "refId": "A"
         }
       ],
-      "title": "LLM Quality Score",
-      "type": "gauge"
+      "title": "LLM Completed Requests",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -81,7 +81,7 @@
               }
             ]
           },
-          "unit": "percentunit"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -94,13 +94,13 @@
       "id": 2,
       "targets": [
         {
-          "expr": "tryops_vton_garment_similarity",
-          "legendFormat": "VTON garment similarity",
+          "expr": "sum(tryops_persisted_requests_total{workload=\"vton\",status=\"completed\"}) by (model_alias)",
+          "legendFormat": "{{model_alias}} completed",
           "refId": "A"
         }
       ],
-      "title": "VTON Garment Similarity",
-      "type": "gauge"
+      "title": "VTON Completed Requests",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -123,11 +123,11 @@
       "targets": [
         {
           "expr": "tryops_llm_latency_p95_ms",
-          "legendFormat": "LLM p95 latency",
+          "legendFormat": "{{model_alias}} {{status}}",
           "refId": "A"
         }
       ],
-      "title": "LLM Latency p95",
+      "title": "LLM Observed Latency",
       "type": "stat"
     },
     {
@@ -150,8 +150,8 @@
       "id": 4,
       "targets": [
         {
-          "expr": "tryops_vton_latency_ms",
-          "legendFormat": "VTON latency",
+          "expr": "tryops_vton_latency_ms{stat=\"avg\"}",
+          "legendFormat": "{{model_alias}} {{status}} avg",
           "refId": "A"
         }
       ],
@@ -165,7 +165,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "tps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -178,12 +178,12 @@
       "id": 5,
       "targets": [
         {
-          "expr": "avg(tryops_llm_tokens_per_second)",
-          "legendFormat": "LLM tokens/sec",
+          "expr": "sum(tryops_llm_tokens_total) by (model_alias)",
+          "legendFormat": "{{model_alias}} tokens",
           "refId": "A"
         }
       ],
-      "title": "LLM Output Throughput",
+      "title": "LLM Token Usage",
       "type": "timeseries"
     },
     {
@@ -206,12 +206,12 @@
       "id": 6,
       "targets": [
         {
-          "expr": "sum(rate(tryops_api_requests_total{status=\"completed\"}[5m])) by (workload, model_alias)",
+          "expr": "sum(tryops_persisted_requests_total{status=\"completed\"}) by (workload, model_alias)",
           "legendFormat": "{{workload}} {{model_alias}}",
           "refId": "A"
         }
       ],
-      "title": "Completed Inference Rate by Model Alias",
+      "title": "Completed Inference Volume by Model Alias",
       "type": "timeseries"
     }
   ],

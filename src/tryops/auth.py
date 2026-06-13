@@ -11,11 +11,21 @@ DEFAULT_API_KEYS_PATH = Path("configs/api_keys.json")
 AUTH_DECISION_SCHEMA = "tryops.auth_decision.v1"
 AUTH_REPORT_SCHEMA = "tryops.api_key_auth_report.v1"
 SESSION_SCHEMA = "tryops.rbac_session.v1"
-REQUIRED_ADMIN_SCOPES = {"promotion:evaluate", "lineage:create", "lineage:read", "admin:read", "session:read"}
+REQUIRED_ADMIN_SCOPES = {
+    "promotion:evaluate",
+    "lineage:create",
+    "lineage:read",
+    "admin:read",
+    "session:read",
+    "account:read",
+    "account:write",
+    "workload:run",
+}
 REQUIRED_RBAC_ROLES = {"viewer", "operator", "admin"}
 FORBIDDEN_SECRET_FIELDS = {"api_key", "raw_key", "secret", "token", "password"}
-PUBLIC_NAV_ITEMS = ("demo", "llm", "vton")
+PUBLIC_NAV_ITEMS = ("vton",)
 SCOPE_NAV_ITEMS = {
+    "account:read": ("account", "llm", "vton"),
     "admin:read": ("dashboard", "history", "runs", "registry", "evaluations", "experiments"),
     "lineage:read": ("governance",),
     "promotion:evaluate": ("incidents",),
@@ -191,24 +201,58 @@ def write_api_key_auth_report(
     return report
 
 
-def build_rbac_session(principal: dict[str, Any]) -> dict[str, Any]:
+def build_rbac_session(
+    principal: dict[str, Any],
+    *,
+    account: dict[str, Any] | None = None,
+    membership: dict[str, Any] | None = None,
+    accounts: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
     scopes = sorted({str(scope) for scope in principal.get("scopes", [])})
     scope_set = set(scopes)
+    membership_role = str((membership or {}).get("role") or "")
+    is_platform_admin = "admin:read" in scope_set or str(principal.get("role")) == "platform_admin"
+    can_read_account = "account:read" in scope_set and membership_role in {
+        "account_owner",
+        "account_member",
+        "account_viewer",
+    }
+    can_run_workload = (
+        "workload:run" in scope_set
+        and membership_role in {"account_owner", "account_member"}
+    ) or is_platform_admin
+    can_manage_account = membership_role == "account_owner" or is_platform_admin
     nav_items = list(PUBLIC_NAV_ITEMS)
     for scope, items in SCOPE_NAV_ITEMS.items():
         if scope in scope_set:
             nav_items.extend(items)
+    if not can_read_account and "account" in nav_items:
+        nav_items.remove("account")
+    if not can_run_workload and "llm" in nav_items:
+        nav_items.remove("llm")
     nav_items = sorted(set(nav_items), key=_nav_order)
     return {
         "schema_version": SESSION_SCHEMA,
         "principal": {
             "key_id": str(principal.get("key_id", "")),
+            "subject": str(principal.get("subject") or principal.get("key_id", "")),
+            "email": str(principal.get("email") or ""),
+            "username": str(principal.get("username") or ""),
+            "display_name": str(principal.get("display_name") or ""),
+            "provider": str(principal.get("provider") or "api_key"),
             "role": str(principal.get("role", "")),
             "scopes": scopes,
         },
+        "account": account,
+        "active_account": account,
+        "accounts": accounts or ([] if account is None else [{"account": account, "membership": membership}]),
+        "membership": membership,
         "permissions": {
             "nav": nav_items,
-            "can_read_admin": "admin:read" in scope_set,
+            "can_read_account": can_read_account or is_platform_admin,
+            "can_manage_account": can_manage_account,
+            "can_run_workload": can_run_workload,
+            "can_read_admin": is_platform_admin,
             "can_read_lineage": "lineage:read" in scope_set,
             "can_create_lineage": "lineage:create" in scope_set,
             "can_promote": "promotion:evaluate" in scope_set,
@@ -237,6 +281,11 @@ def _find_active_key_by_hash(registry: dict[str, Any], key_hash: str) -> dict[st
 def _principal_from_entry(entry: dict[str, Any]) -> dict[str, Any]:
     return {
         "key_id": str(entry["key_id"]),
+        "subject": str(entry["key_id"]),
+        "provider": "api_key",
+        "email": "",
+        "username": str(entry["key_id"]),
+        "display_name": str(entry["key_id"]),
         "role": str(entry["role"]),
         "scopes": list(entry["scopes"]),
     }

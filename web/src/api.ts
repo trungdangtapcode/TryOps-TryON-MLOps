@@ -1,4 +1,11 @@
 import type {
+  AccountDashboard,
+  AccountInvitation,
+  AccountJobFeed,
+  AccountMembership,
+  AccountMember,
+  AccountQuota,
+  AuthConfig,
   AuthSession,
   DashboardSummary,
   EvaluationIndex,
@@ -14,7 +21,9 @@ import type {
   QuotaReadModel,
   RequestRecord,
   RollbackState,
+  UserProfile,
   VtonComparisonReport,
+  VtonJobRecord,
   VtonResponse
 } from "./types";
 
@@ -90,14 +99,30 @@ export interface FeedbackPayload {
 }
 
 export class TryOpsClient {
-  constructor(private readonly apiKey: string) {}
+  constructor(
+    private readonly apiKey: string,
+    private readonly accessToken = "",
+    private readonly accountId = ""
+  ) {}
 
   hasApiKey(): boolean {
     return Boolean(this.apiKey.trim());
   }
 
+  hasCredentials(): boolean {
+    return Boolean(this.apiKey.trim() || this.accessToken.trim());
+  }
+
   async health(): Promise<{ status: string }> {
     return this.get("/api/health", false);
+  }
+
+  async authConfig(): Promise<AuthConfig> {
+    const response = await this.get<{ data: AuthConfig }>("/api/auth/config", false);
+    if (!response.data) {
+      throw new Error("Auth config unavailable");
+    }
+    return response.data;
   }
 
   async ready(): Promise<Record<string, unknown>> {
@@ -108,6 +133,132 @@ export class TryOpsClient {
     const response = await this.get<{ data: AuthSession }>("/api/auth/session", true);
     if (!response.data) {
       throw new Error("RBAC session unavailable");
+    }
+    return response.data;
+  }
+
+  async bootstrapAccount(): Promise<{
+    account: AuthSession["account"];
+    membership: AuthSession["membership"];
+    accounts?: AccountMembership[];
+  }> {
+    const response = await this.post<{ data: { account: AuthSession["account"]; membership: AuthSession["membership"] } }>(
+      "/api/accounts/bootstrap",
+      this.apiKey.trim() ? { api_key: this.apiKey.trim() } : {}
+    );
+    if (!response.data) {
+      throw new Error("Account bootstrap unavailable");
+    }
+    return response.data;
+  }
+
+  async accounts(): Promise<AccountMembership[]> {
+    const response = await this.get<{ data: AccountMembership[] }>("/api/accounts", true);
+    return response.data ?? [];
+  }
+
+  async createAccount(payload: { name: string; description?: string }): Promise<{
+    account: AuthSession["account"];
+    membership: AuthSession["membership"];
+    accounts?: AccountMembership[];
+  }> {
+    const response = await this.post<{ data: { account: AuthSession["account"]; membership: AuthSession["membership"]; accounts?: AccountMembership[] } }>(
+      "/api/accounts",
+      payload
+    );
+    if (!response.data) {
+      throw new Error("Workspace creation failed");
+    }
+    return response.data;
+  }
+
+  async updateAccount(accountId: string, payload: { name?: string; description?: string }): Promise<AuthSession["account"]> {
+    const response = await this.patch<{ data: AuthSession["account"] }>(`/api/accounts/${encodeURIComponent(accountId)}`, payload);
+    if (!response.data) {
+      throw new Error("Workspace update failed");
+    }
+    return response.data;
+  }
+
+  async accountDashboard(): Promise<AccountDashboard> {
+    const response = await this.get<{ data: AccountDashboard }>("/api/account/dashboard", true);
+    if (!response.data) {
+      throw new Error("Account dashboard unavailable");
+    }
+    return response.data;
+  }
+
+  async accountQuota(): Promise<AccountQuota> {
+    const response = await this.get<{ data: AccountQuota }>("/api/account/quota", true);
+    if (!response.data) {
+      throw new Error("Account quota unavailable");
+    }
+    return response.data;
+  }
+
+  async accountJobs(status = "active", limit = 20): Promise<AccountJobFeed> {
+    const params = new URLSearchParams({ status, limit: String(limit) });
+    const response = await this.get<AccountJobFeed>(`/api/account/jobs?${params}`, true);
+    return response;
+  }
+
+  async accountMembers(): Promise<AccountMember[]> {
+    const response = await this.get<{ data: AccountMember[] }>("/api/account/members", true);
+    return response.data ?? [];
+  }
+
+  async searchProfiles(query: string): Promise<UserProfile[]> {
+    const params = new URLSearchParams({ q: query });
+    const response = await this.get<{ data: UserProfile[] }>(`/api/profiles/search?${params}`, true);
+    return response.data ?? [];
+  }
+
+  async accountInvitations(accountId: string): Promise<AccountInvitation[]> {
+    const response = await this.get<{ data: AccountInvitation[] }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/invitations`,
+      true
+    );
+    return response.data ?? [];
+  }
+
+  async inviteAccountMember(accountId: string, payload: { email: string; role: string }): Promise<AccountInvitation> {
+    const response = await this.post<{ data: AccountInvitation }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/invitations`,
+      payload
+    );
+    if (!response.data) {
+      throw new Error("Invitation failed");
+    }
+    return response.data;
+  }
+
+  async revokeInvitation(accountId: string, invitationId: string): Promise<AccountInvitation> {
+    const response = await this.delete<{ data: AccountInvitation }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/invitations/${encodeURIComponent(invitationId)}`
+    );
+    if (!response.data) {
+      throw new Error("Invitation revoke failed");
+    }
+    return response.data;
+  }
+
+  async updateAccountMember(accountId: string, memberId: string, payload: { role?: string; status?: string }): Promise<AccountMember> {
+    const response = await this.patch<{ data: AccountMember }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/members/${encodeURIComponent(memberId)}`,
+      payload
+    );
+    if (!response.data) {
+      throw new Error("Member update failed");
+    }
+    return response.data;
+  }
+
+  async removeAccountMember(accountId: string, memberId: string): Promise<AccountMember> {
+    const response = await this.delete<{ data: AccountMember }>(
+      `/api/accounts/${encodeURIComponent(accountId)}/members/${encodeURIComponent(memberId)}`
+    );
+    if (!response.data) {
+      throw new Error("Member removal failed");
     }
     return response.data;
   }
@@ -208,8 +359,36 @@ export class TryOpsClient {
     const url = new URL(raw, window.location.origin);
     if (this.apiKey.trim()) {
       url.searchParams.set("api_key", this.apiKey.trim());
+    } else if (this.accessToken.trim()) {
+      url.searchParams.set("access_token", this.accessToken.trim());
+    }
+    if (this.accountId.trim()) {
+      url.searchParams.set("account_id", this.accountId.trim());
     }
     return url.toString();
+  }
+
+  async artifactObjectUrl(pathOrUrl?: string): Promise<string | undefined> {
+    if (!pathOrUrl) {
+      return undefined;
+    }
+    const raw = pathOrUrl.startsWith("http://") || pathOrUrl.startsWith("https://")
+      ? pathOrUrl
+      : pathOrUrl.startsWith("/api/")
+        ? `${API_BASE}${pathOrUrl}`
+        : `${API_BASE}/api/artifacts/file?path=${encodeURIComponent(pathOrUrl)}`;
+    const url = new URL(raw, window.location.origin);
+    if (this.apiKey.trim()) {
+      url.searchParams.set("api_key", this.apiKey.trim());
+    }
+    if (this.accountId.trim()) {
+      url.searchParams.set("account_id", this.accountId.trim());
+    }
+    const response = await fetch(url, { headers: this.authHeaders() });
+    if (!response.ok) {
+      return undefined;
+    }
+    return URL.createObjectURL(await response.blob());
   }
 
   async lineage(requestId: string): Promise<Record<string, unknown>> {
@@ -249,6 +428,14 @@ export class TryOpsClient {
     return this.post("/api/vton/infer", payload);
   }
 
+  async submitVtonJob(payload: VtonPayload): Promise<VtonJobRecord> {
+    return this.post("/api/vton/jobs", payload);
+  }
+
+  async vtonJob(jobId: string): Promise<VtonJobRecord> {
+    return this.get(`/api/vton/jobs/${encodeURIComponent(jobId)}`, true);
+  }
+
   async uploadVtonImage(payload: VtonUploadPayload): Promise<VtonUploadResponse> {
     return this.post("/api/vton/upload", {
       ...payload,
@@ -265,15 +452,32 @@ export class TryOpsClient {
     if (includeApiKey && this.apiKey.trim()) {
       url.searchParams.set("api_key", this.apiKey.trim());
     }
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: this.authHeaders() });
     return parseResponse<T>(response);
   }
 
   private async post<T>(path: string, payload: object, headers: Record<string, string> = {}): Promise<T> {
     const response = await fetch(`${API_BASE}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...headers },
+      headers: { "Content-Type": "application/json", ...this.authHeaders(), ...headers },
       body: JSON.stringify(payload)
+    });
+    return parseResponse<T>(response);
+  }
+
+  private async patch<T>(path: string, payload: object): Promise<T> {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", ...this.authHeaders() },
+      body: JSON.stringify(payload)
+    });
+    return parseResponse<T>(response);
+  }
+
+  private async delete<T>(path: string): Promise<T> {
+    const response = await fetch(`${API_BASE}${path}`, {
+      method: "DELETE",
+      headers: this.authHeaders()
     });
     return parseResponse<T>(response);
   }
@@ -282,8 +486,22 @@ export class TryOpsClient {
     const url = new URL(`${API_BASE}/api/artifacts/file`, window.location.origin);
     url.searchParams.set("path", path);
     url.searchParams.set("api_key", this.apiKey.trim() || fallbackApiKey);
-    const response = await fetch(url);
+    if (this.accountId.trim()) {
+      url.searchParams.set("account_id", this.accountId.trim());
+    }
+    const response = await fetch(url, { headers: this.authHeaders() });
     return parseResponse<T>(response);
+  }
+
+  private authHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {};
+    if (this.accessToken.trim()) {
+      headers.Authorization = `Bearer ${this.accessToken.trim()}`;
+    }
+    if (this.accountId.trim()) {
+      headers["X-TryOps-Account-Id"] = this.accountId.trim();
+    }
+    return headers;
   }
 }
 
@@ -291,8 +509,28 @@ async function parseResponse<T>(response: Response): Promise<T> {
   const contentType = response.headers.get("content-type") ?? "";
   const body = contentType.includes("application/json") ? await response.json() : await response.text();
   if (!response.ok) {
-    const message = typeof body === "string" ? body : body?.error?.message ?? response.statusText;
+    const message = typeof body === "string"
+      ? body
+      : body?.error?.message
+        ?? body?.message
+        ?? formatGatewayError(response.statusText, body);
     throw new Error(message);
   }
+  if (typeof body !== "string" && body?.status === "rejected") {
+    throw new Error(
+      body?.error?.message
+      ?? body?.message
+      ?? "Request was rejected"
+    );
+  }
   return body as T;
+}
+
+function formatGatewayError(statusText: string, body: Record<string, unknown>): string {
+  const error = typeof body.error === "string" ? body.error : undefined;
+  const reason = typeof body.reason === "string" ? body.reason : undefined;
+  if (error && reason) {
+    return `${statusText}: ${error} (${reason})`;
+  }
+  return error || reason ? `${statusText}: ${error ?? reason}` : statusText;
 }

@@ -41,7 +41,7 @@
       "id": 1,
       "targets": [
         {
-          "expr": "sum(rate(tryops_guardrail_events_total{action=\"block\"}[5m])) by (owasp_id)",
+          "expr": "sum(rate(tryops_guardrail_events_total{action=\"block\"}[5m])) by (owasp_id) or vector(0)",
           "legendFormat": "{{owasp_id}}",
           "refId": "A"
         }
@@ -69,7 +69,7 @@
       "id": 2,
       "targets": [
         {
-          "expr": "sum(rate(tryops_guardrail_events_total[5m])) by (owasp_id, action)",
+          "expr": "sum(rate(tryops_guardrail_events_total[5m])) by (owasp_id, action) or vector(0)",
           "legendFormat": "{{owasp_id}} {{action}}",
           "refId": "A"
         }
@@ -97,7 +97,7 @@
       "id": 3,
       "targets": [
         {
-          "expr": "sum(tryops_guardrail_events_total) by (owasp_id, action, status)",
+          "expr": "sum(tryops_guardrail_events_total) by (owasp_id, action, status) or vector(0)",
           "legendFormat": "{{owasp_id}} {{action}} {{status}}",
           "refId": "A"
         }

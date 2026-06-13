@@ -2,6 +2,7 @@ import type { ComponentType } from "react";
 import type { LucideProps } from "lucide-react";
 
 export type ViewKey =
+  | "account"
   | "dashboard"
   | "demo"
   | "llm"
@@ -25,16 +26,138 @@ export interface AuthSession {
   schema_version: string;
   principal: {
     key_id: string;
+    subject: string;
+    email: string;
+    username: string;
+    display_name: string;
+    provider: string;
     role: string;
     scopes: string[];
   };
+  account?: AccountSummary | null;
+  active_account?: AccountSummary | null;
+  accounts?: AccountMembership[];
+  membership?: AccountMember | null;
   permissions: {
     nav: ViewKey[];
+    can_read_account: boolean;
+    can_manage_account: boolean;
+    can_run_workload: boolean;
     can_read_admin: boolean;
     can_read_lineage: boolean;
     can_create_lineage: boolean;
     can_promote: boolean;
   };
+}
+
+export interface AuthConfig {
+  schema_version: string;
+  enabled: boolean;
+  provider: "keycloak" | string;
+  realm: string;
+  client_id: string;
+  issuer: string;
+  authorization_endpoint: string;
+  registration_endpoint: string;
+  token_endpoint: string;
+  logout_endpoint: string;
+  account_console_endpoint: string;
+  scopes: string;
+  demo_api_key_fallback: boolean;
+}
+
+export interface AccountSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  avatar_url?: string | null;
+  plan: "free" | "team" | "enterprise" | string;
+  status: string;
+  created_at: string;
+}
+
+export interface AccountMembership {
+  account: AccountSummary;
+  membership: AccountMember;
+}
+
+export interface AccountMember {
+  id: string;
+  account_id: string;
+  subject: string;
+  email?: string | null;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  role: string;
+  status: string;
+  created_at: string;
+  last_seen_at?: string | null;
+}
+
+export interface UserProfile {
+  subject: string;
+  email?: string | null;
+  username?: string | null;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  last_seen_at?: string | null;
+}
+
+export interface AccountInvitation {
+  id: string;
+  account_id: string;
+  email: string;
+  invited_subject?: string | null;
+  role: string;
+  status: string;
+  invited_by?: string | null;
+  created_at: string;
+  updated_at: string;
+  accepted_at?: string | null;
+  revoked_at?: string | null;
+}
+
+export interface AccountQuota {
+  schema_version: string;
+  generated_at: string;
+  account: AccountSummary;
+  period: string;
+  user_hash: string;
+  plan: string;
+  total_used: number;
+  total_limit: number;
+  remaining: number;
+  utilization_pct: number;
+  dimensions: Array<{
+    dimension: string;
+    used: number;
+    limit: number;
+    remaining: number;
+    utilization_pct: number;
+  }>;
+}
+
+export interface AccountDashboard {
+  schema_version: string;
+  generated_at: string;
+  account: AccountSummary;
+  usage: {
+    total_requests: number;
+    llm: WorkloadSummary;
+    vton: WorkloadSummary;
+    feedback: {
+      count: number;
+      avg_rating: number | null;
+    };
+    models_by_stage: Record<string, number>;
+  };
+  recent_requests: RequestRecord[];
+  quota: AccountQuota;
+  members_count: number;
 }
 
 export type ProfessorDemoTone = "green" | "amber" | "blue" | "red" | "neutral";
@@ -240,6 +363,46 @@ export interface RequestRecord {
   status: string;
   request_id?: string | null;
   trace_id?: string | null;
+}
+
+export interface VtonJobRecord {
+  schema_version: string;
+  job_id: string;
+  workload: "vton" | string;
+  request_id: string;
+  status: "accepted" | "queued" | "running" | "completed" | "failed" | string;
+  created_at: string;
+  queued_at: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  account_id?: string | null;
+  principal_subject?: string | null;
+  payload_metadata?: Record<string, unknown>;
+  queue_depth?: number;
+  result?: VtonResponse;
+  error?: {
+    code?: string;
+    message?: string;
+  };
+  concurrency?: JobConcurrency;
+}
+
+export interface JobConcurrency {
+  schema_version: string;
+  workload: "vton" | string;
+  plan: string;
+  active: number;
+  limit: number;
+  remaining: number;
+  global_workers?: number;
+}
+
+export interface AccountJobFeed {
+  schema_version: string;
+  status: string;
+  account: AccountSummary;
+  concurrency: JobConcurrency;
+  data: VtonJobRecord[];
 }
 
 export interface ModelRecord {

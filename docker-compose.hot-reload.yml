@@ -1,0 +1,43 @@
+services:
+  api:
+    command:
+      - uvicorn
+      - tryops.api:create_app
+      - --factory
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --reload
+      - --reload-dir
+      - /app/src
+    environment:
+      TRYOPS_HOT_RELOAD: "1"
+      WATCHFILES_FORCE_POLLING: "true"
+    volumes:
+      - ./src:/app/src
+      - ./configs:/app/configs:ro
+
+  web-dev:
+    image: node:24-slim
+    working_dir: /web
+    command:
+      - /bin/sh
+      - -lc
+      - |
+        npm ci
+        npm run dev
+    environment:
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_TRYOPS_API_BASE: http://127.0.0.1:${TRYOPS_GATEWAY_PORT:-18081}
+    ports:
+      - "${TRYOPS_WEB_DEV_PORT:-18173}:15173"
+    volumes:
+      - ./web:/web
+      - web-node-modules:/web/node_modules
+    depends_on:
+      gateway:
+        condition: service_healthy
+
+volumes:
+  web-node-modules:

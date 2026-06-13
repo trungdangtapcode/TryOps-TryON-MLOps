@@ -79,6 +79,34 @@ class AuthTests(unittest.TestCase):
         self.assertFalse(operator_session["permissions"]["can_create_lineage"])
         self.assertTrue(admin_session["permissions"]["can_create_lineage"])
 
+    def test_account_owner_membership_can_manage_without_write_scope(self) -> None:
+        session = build_rbac_session(
+            {
+                "key_id": "kc-owner",
+                "subject": "kc-owner",
+                "role": "account_member",
+                "scopes": ["session:read", "account:read", "workload:run"],
+            },
+            account={
+                "id": "acct_owner",
+                "name": "Owner Workspace",
+                "slug": "owner-workspace",
+                "plan": "free",
+                "status": "active",
+                "created_at": "2026-06-13T00:00:00Z",
+            },
+            membership={
+                "id": "member_owner",
+                "account_id": "acct_owner",
+                "subject": "kc-owner",
+                "role": "account_owner",
+                "status": "active",
+                "created_at": "2026-06-13T00:00:00Z",
+            },
+        )
+
+        self.assertTrue(session["permissions"]["can_manage_account"])
+
     def test_auth_report_is_redacted_and_passes(self) -> None:
         scenarios = [
             {

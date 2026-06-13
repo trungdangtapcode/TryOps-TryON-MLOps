@@ -34,6 +34,7 @@ pub(crate) struct AppState {
     pub(crate) max_body_bytes: usize,
     pub(crate) rate_limit_per_minute: u64,
     pub(crate) structured_log_path: Option<String>,
+    pub(crate) structured_log_lock: Arc<Mutex<()>>,
 }
 
 impl AppState {
@@ -66,7 +67,7 @@ impl AppState {
             quota: Arc::new(Mutex::new(quota)),
             edge_rate: Arc::new(Mutex::new(EdgeRateLedger::default())),
             metrics: Arc::new(Mutex::new(MetricsLedger::default())),
-            auth: AuthPreflight::from_env(),
+            auth: AuthPreflight::from_env().await,
             quota_store,
             quota_durable,
             quota_postgres_admission: env_bool("TRYOPS_GATEWAY_QUOTA_POSTGRES_ADMISSION", false),
@@ -82,6 +83,7 @@ impl AppState {
             max_body_bytes: env_u64("TRYOPS_GATEWAY_MAX_BODY_BYTES", 4 * 1024 * 1024) as usize,
             rate_limit_per_minute: env_u64("TRYOPS_GATEWAY_RATE_LIMIT_PER_MINUTE", 600),
             structured_log_path: optional_env("TRYOPS_GATEWAY_STRUCTURED_LOG_PATH"),
+            structured_log_lock: Arc::new(Mutex::new(())),
         })
     }
 }
@@ -106,5 +108,6 @@ pub(crate) fn test_state(guardrail_url: Option<String>) -> Arc<AppState> {
         max_body_bytes: 1024 * 1024,
         rate_limit_per_minute: 600,
         structured_log_path: None,
+        structured_log_lock: Arc::new(Mutex::new(())),
     })
 }

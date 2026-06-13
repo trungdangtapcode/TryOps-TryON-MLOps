@@ -28,7 +28,7 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "reqps"
+          "unit": "short"
         },
         "overrides": []
       },
@@ -51,12 +51,12 @@
       },
       "targets": [
         {
-          "expr": "sum(rate(tryops_api_requests_total[5m])) by (workload, status)",
+          "expr": "sum(tryops_persisted_requests_total) by (workload, status)",
           "legendFormat": "{{workload}} {{status}}",
           "refId": "A"
         }
       ],
-      "title": "API Request Rate",
+      "title": "Persisted API Requests",
       "type": "timeseries"
     },
     {
@@ -79,7 +79,7 @@
       "id": 2,
       "targets": [
         {
-          "expr": "sum(rate(tryops_api_requests_total{status!=\"completed\"}[5m])) / clamp_min(sum(rate(tryops_api_requests_total[5m])), 1)",
+          "expr": "sum(tryops_persisted_requests_total{status!=\"completed\"}) / clamp_min(sum(tryops_persisted_requests_total), 1)",
           "legendFormat": "error ratio",
           "refId": "A"
         }
@@ -107,12 +107,12 @@
       "id": 3,
       "targets": [
         {
-          "expr": "sum(tryops_api_latency_ms_sum) by (workload) / clamp_min(sum(tryops_api_latency_ms_count) by (workload), 1)",
-          "legendFormat": "{{workload}} avg latency",
+          "expr": "avg(tryops_vton_latency_ms{stat=\"avg\"}) by (workload) or avg(tryops_llm_latency_p95_ms) by (workload)",
+          "legendFormat": "{{workload}} observed latency",
           "refId": "A"
         }
       ],
-      "title": "Average API Latency",
+      "title": "Observed Workload Latency",
       "type": "bargauge"
     },
     {
@@ -185,7 +185,7 @@
       "id": 6,
       "targets": [
         {
-          "expr": "ALERTS{alertstate=\"firing\"}",
+          "expr": "ALERTS{alertstate=\"firing\"} or vector(0)",
           "legendFormat": "{{alertname}} {{severity}}",
           "refId": "A"
         }
@@ -274,7 +274,7 @@
           "refId": "A"
         },
         {
-          "expr": "sum(rate(tryops_gateway_upstream_errors_total[5m]))",
+          "expr": "sum(rate(tryops_gateway_upstream_errors_total[5m])) or vector(0)",
           "legendFormat": "upstream errors",
           "refId": "B"
         }

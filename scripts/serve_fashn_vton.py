@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 import threading
 from http import HTTPStatus
@@ -19,20 +20,35 @@ if str(SCRIPTS) not in sys.path:
 from run_fashn_vton_single import DEFAULT_WEIGHTS_DIR, FashnVtonRunner  # noqa: E402
 
 
+class ResourceNotReadyError(RuntimeError):
+    pass
+
+
 class FashnVtonService:
     def __init__(self, *, weights_dir: Path, device: str | None) -> None:
         self.runner = FashnVtonRunner(weights_dir=weights_dir, device=device)
         self.lock = threading.Lock()
+        self.min_available_mb = int(os.environ.get("TRYOPS_FASHN_MIN_AVAILABLE_MB", "4096"))
 
     def health(self) -> dict[str, Any]:
+        available_mb = _mem_available_mb()
         return {
             "status": "ok",
             "model": "fashn-ai/fashn-vton-1.5",
             "weights_dir": str(self.runner.weights_dir),
             "loaded": self.runner._pipeline is not None,
+            "gpu_first_load": os.environ.get("FASHN_VTON_GPU_FIRST_LOAD", "1"),
+            "memory": {
+                "available_mb": available_mb,
+                "min_available_mb": self.min_available_mb,
+                "safe_to_load": self.runner._pipeline is not None
+                or self.min_available_mb <= 0
+                or available_mb >= self.min_available_mb,
+            },
         }
 
     def infer(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._ensure_memory_budget()
         with self.lock:
             report = self.runner.run(
                 person_image_path=_required_str(payload, "person_image_path"),
@@ -52,6 +68,16 @@ class FashnVtonService:
             "report": report,
         }
 
+    def _ensure_memory_budget(self) -> None:
+        if self.runner._pipeline is not None:
+            return
+        available_mb = _mem_available_mb()
+        if self.min_available_mb > 0 and available_mb < self.min_available_mb:
+            raise ResourceNotReadyError(
+                f"Refusing to load FASHN VTON: only {available_mb}MiB RAM available, "
+                f"need at least {self.min_available_mb}MiB. Close other apps or stop services before generating."
+            )
+
 
 def make_handler(service: FashnVtonService) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
@@ -70,6 +96,16 @@ def make_handler(service: FashnVtonService) -> type[BaseHTTPRequestHandler]:
             try:
                 payload = self._read_json()
                 self._json(HTTPStatus.OK, service.infer(payload))
+            except ResourceNotReadyError as exc:
+                self._json(
+                    HTTPStatus.SERVICE_UNAVAILABLE,
+                    {
+                        "api_version": "v1",
+                        "status": "rejected",
+                        "error": "insufficient_host_memory",
+                        "message": str(exc),
+                    },
+                )
             except Exception as exc:
                 self._json(
                     HTTPStatus.BAD_REQUEST,
@@ -110,6 +146,17 @@ def _required_str(payload: dict[str, Any], field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f"{field} is required")
     return value
+
+
+def _mem_available_mb() -> int:
+    try:
+        with open("/proc/meminfo", "r", encoding="utf-8") as handle:
+            for line in handle:
+                if line.startswith("MemAvailable:"):
+                    return int(line.split()[1]) // 1024
+    except OSError:
+        return 0
+    return 0
 
 
 def main() -> int:

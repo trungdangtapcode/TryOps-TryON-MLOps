@@ -7,6 +7,7 @@ import {
   Gauge,
   History,
   Images,
+  LayoutDashboard,
   ShieldAlert,
   Shuffle,
   Workflow
@@ -15,12 +16,13 @@ import type { ModelCandidate, NavItem, ProfessorDemoMetric, ProfessorDemoStep } 
 import professorDemoStoryboard from "./professor_demo_storyboard.json";
 
 export const navItems: NavItem[] = [
-  { key: "dashboard", label: "Dashboard", icon: Gauge, requiredScope: "admin:read" },
+  { key: "account", label: "My Account", icon: LayoutDashboard, requiredScope: "account:read" },
+  { key: "vton", label: "Try-On Studio", icon: Images },
+  { key: "llm", label: "AI Playground", icon: Activity },
   { key: "demo", label: "Professor Demo", icon: FlaskConical },
-  { key: "llm", label: "LLM Playground", icon: Activity },
-  { key: "vton", label: "VTON Studio", icon: Images },
-  { key: "history", label: "History", icon: History, requiredScope: "admin:read" },
-  { key: "runs", label: "Runs", icon: Workflow, requiredScope: "admin:read" },
+  { key: "dashboard", label: "Admin Dashboard", icon: Gauge, requiredScope: "admin:read" },
+  { key: "history", label: "Request History", icon: History, requiredScope: "admin:read" },
+  { key: "runs", label: "Pipeline Runs", icon: Workflow, requiredScope: "admin:read" },
   { key: "registry", label: "Registry", icon: Boxes, requiredScope: "admin:read" },
   { key: "evaluations", label: "Evaluations", icon: BarChart3, requiredScope: "admin:read" },
   { key: "experiments", label: "Experiments", icon: Shuffle, requiredScope: "admin:read" },

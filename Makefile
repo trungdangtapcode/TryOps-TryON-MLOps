@@ -1,4 +1,4 @@
-.PHONY: test validate-sample validate-bad pipeline-sample deploy-package-sample rollback-sample chaos-sample quota-sample native-quota-ledger-smoke auth-sample supply-chain-sample model-supply-chain-sample vulnerability-scan-sample evaluation-index-sample dvc-minio-sample finops-sample orchestration-sample vton-baseline-sample vton-preprocess-sample vton-real-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample vton-clip-similarity-sample vton-compare-sample vton-advanced-eval-sample llm-baseline-sample llm-benchmark-sample llm-real-sample llm-pareto-sample llm-optimization-report-sample llm-sensitivity-sample llm-continuous-batching-sample llm-vllm-probe-sample llm-quantized-preflight-sample eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample guardrail-sample alert-sample slo-burn-rate-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample governance-sample benchmark-sample registry-webhook-sample signed-pr-promotion-sample native-cpp-cli-build native-image-metrics-build native-image-metrics-sample native-perf-stats-build native-perf-stats-sample native-burn-rate-build native-energy-stats-build native-eval-stats-build native-experiment-router-build native-experiment-stats-build native-batch-scheduler-build native-vton-eval-build native-model-scan-build native-model-provenance-build native-openlineage-build native-gitops-build native-semantic-cache-build native-semantic-cache-test native-chaos-build energy-demo-sample energy-sample native-vton-preprocess-build native-vton-preprocess-sample native-policy-sample native-cpp-test native-benchmark-build native-benchmark-test native-fullstack-load-build native-fullstack-load-test native-fullstack-load-sample native-vllm-probe-build native-vllm-probe-test native-quantized-preflight-build native-quantized-preflight-test native-stack-smoke-build native-stack-smoke-test native-job-runner-build native-job-runner-test native-job-runner-sample native-slo-gate-build native-slo-gate-test native-slo-gate-sample native-event-dispatcher-build native-event-dispatcher-test native-event-dispatcher-sample native-data-versioning-build native-data-versioning-test native-demo-acceptance-build native-demo-acceptance-test native-demo-recorder-build native-demo-recorder-test professor-demo-acceptance professor-demo-refresh-acceptance professor-demo-video native-vuln-scan-build native-vuln-scan-test native-config-contract-build native-config-contract-test native-config-contract-sample native-performance-budget-build native-performance-budget-test native-performance-budget-sample native-evaluation-index-build native-evaluation-index-test native-guardrail-build native-guardrail-test native-guardrail-smoke native-edge-cache-smoke native-edge-guardrail-smoke native-go-build native-go-test native-go-smoke native-rust-build native-rust-test native-rust-smoke native-static-smoke gateway-benchmark gateway-benchmark-native native-tooling web-build web-typecheck app-up app-smoke app-down db-init roadmap-status smoke
+.PHONY: test validate-sample validate-bad pipeline-sample deploy-package-sample rollback-sample chaos-sample quota-sample native-quota-ledger-smoke auth-sample supply-chain-sample model-supply-chain-sample vulnerability-scan-sample evaluation-index-sample dvc-minio-sample finops-sample orchestration-sample vton-baseline-sample vton-preprocess-sample vton-real-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample vton-clip-similarity-sample vton-compare-sample vton-advanced-eval-sample llm-baseline-sample llm-benchmark-sample llm-real-sample llm-pareto-sample llm-optimization-report-sample llm-sensitivity-sample llm-continuous-batching-sample llm-vllm-probe-sample llm-quantized-preflight-sample eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample guardrail-sample alert-sample slo-burn-rate-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample governance-sample benchmark-sample registry-webhook-sample signed-pr-promotion-sample native-cpp-cli-build native-image-metrics-build native-image-metrics-sample native-perf-stats-build native-perf-stats-sample native-burn-rate-build native-energy-stats-build native-eval-stats-build native-experiment-router-build native-experiment-stats-build native-batch-scheduler-build native-vton-eval-build native-model-scan-build native-model-provenance-build native-openlineage-build native-gitops-build native-semantic-cache-build native-semantic-cache-test native-chaos-build energy-demo-sample energy-sample native-vton-preprocess-build native-vton-preprocess-sample native-policy-sample native-cpp-test native-benchmark-build native-benchmark-test native-fullstack-load-build native-fullstack-load-test native-fullstack-load-sample native-vllm-probe-build native-vllm-probe-test native-quantized-preflight-build native-quantized-preflight-test native-stack-smoke-build native-stack-smoke-test native-job-runner-build native-job-runner-test native-job-runner-sample native-slo-gate-build native-slo-gate-test native-slo-gate-sample native-event-dispatcher-build native-event-dispatcher-test native-event-dispatcher-sample native-data-versioning-build native-data-versioning-test native-demo-acceptance-build native-demo-acceptance-test native-demo-recorder-build native-demo-recorder-test professor-demo-acceptance professor-demo-refresh-acceptance professor-demo-video native-vuln-scan-build native-vuln-scan-test native-config-contract-build native-config-contract-test native-config-contract-sample native-performance-budget-build native-performance-budget-test native-performance-budget-sample native-evaluation-index-build native-evaluation-index-test native-guardrail-build native-guardrail-test native-guardrail-smoke native-edge-cache-smoke native-edge-guardrail-smoke native-go-build native-go-test native-go-smoke native-rust-build native-rust-test native-rust-smoke native-static-smoke gateway-benchmark gateway-benchmark-native native-tooling web-build web-typecheck app-up app-up-hotreload app-dev app-smoke app-down db-init roadmap-status smoke
 
 PYTHONPATH := src
 CXX ?= g++
@@ -25,9 +25,19 @@ FASHN_VTON_PYTHON ?= $(FASHN_VTON_VENV)/bin/python
 FASHN_VTON_WEIGHTS_DIR ?= artifacts/models/fashn-vton-1.5
 FASHN_VTON_HOST ?= 0.0.0.0
 FASHN_VTON_PORT ?= 18101
+FASHN_VTON_PID_FILE ?= artifacts/runtime/fashn-vton-service.pid
+FASHN_VTON_LOG ?= artifacts/logs/fashn-vton-service.log
+FASHN_VTON_GPU_FIRST_LOAD ?= 1
+FASHN_VTON_CUDA_MODULE_LOADING ?= LAZY
+FASHN_VTON_CUDA_ALLOC_CONF ?= expandable_segments:True
+TRYOPS_HOT_RELOAD ?= 0
+TRYOPS_WEB_DEV_PORT ?= 18173
+TRYOPS_APP_MIN_AVAILABLE_MB ?= 4096
+TRYOPS_FASHN_MIN_AVAILABLE_MB ?= 4096
 
 .PHONY: native-gguf-preflight-build native-gguf-preflight-test llm-gguf-preflight-sample
-.PHONY: fashn-vton-venv fashn-vton-download fashn-vton-service fashn-vton-sample
+.PHONY: fashn-vton-venv fashn-vton-optimize-loader fashn-vton-download fashn-vton-service fashn-vton-service-bg fashn-vton-stop fashn-vton-sample
+.PHONY: app-prune-build-cache
 .PHONY: native-trace-envelope-cpp-build native-trace-envelope-cpp-test native-trace-envelope-build native-trace-envelope-test native-trace-envelope-sample
 .PHONY: native-container-contract-build native-container-contract-test native-container-contract-sample
 .PHONY: native-distributed-quota-build native-distributed-quota-test native-distributed-quota-smoke
@@ -1323,10 +1333,29 @@ native-tooling:
 	@command -v "$(GO)" >/dev/null 2>&1 && $(GO) version || echo "go not installed; build the Go controller with 'make native-go-build' after installing go>=1.22"
 	@$(CXX) --version | head -n 1
 
-app-up: evaluation-index-sample
+app-up:
 	@set -eu; \
+	available_kb=$$(awk '/MemAvailable:/ {print $$2}' /proc/meminfo); \
+	available_mb=$$((available_kb / 1024)); \
+	if [ "$$available_mb" -lt "$(TRYOPS_APP_MIN_AVAILABLE_MB)" ]; then \
+		echo "Refusing to start TryOps: only $${available_mb}MiB RAM available, need at least $(TRYOPS_APP_MIN_AVAILABLE_MB)MiB."; \
+		echo "Close memory-heavy apps or run 'make app-down' first. This guard prevents another OOM crash."; \
+		exit 1; \
+	fi; \
+	$(MAKE) fashn-vton-service-bg; \
 	$(MAKE) prepare-container-artifacts; \
 	uid=$$(id -u); gid=$$(id -g); \
+	hot_reload="$(TRYOPS_HOT_RELOAD)"; \
+	compose_files="-f docker-compose.yml"; \
+	compose_profiles="--profile ops"; \
+	services="gateway keycloak controller prometheus grafana minio mlflow guardrail"; \
+	if [ "$$hot_reload" = "1" ] || [ "$$hot_reload" = "true" ]; then \
+		compose_files="$$compose_files -f docker-compose.hot-reload.yml"; \
+		services="gateway keycloak controller web-dev prometheus grafana minio mlflow guardrail"; \
+		echo "TRYOPS_HOT_RELOAD enabled: Vite dev UI will listen on http://127.0.0.1:$${TRYOPS_WEB_DEV_PORT:-$(TRYOPS_WEB_DEV_PORT)}"; \
+	else \
+		docker compose -f docker-compose.yml -f docker-compose.hot-reload.yml rm -sf web-dev >/dev/null 2>&1 || true; \
+	fi; \
 	TRYOPS_CONTAINER_UID=$$uid \
 	TRYOPS_CONTAINER_GID=$$gid \
 	TRYOPS_POSTGRES_PORT=$${TRYOPS_POSTGRES_PORT:-15432} \
@@ -1342,11 +1371,35 @@ app-up: evaluation-index-sample
 	TRYOPS_PROMETHEUS_PORT=$${TRYOPS_PROMETHEUS_PORT:-19090} \
 	TRYOPS_ALERTMANAGER_PORT=$${TRYOPS_ALERTMANAGER_PORT:-19093} \
 	TRYOPS_GRAFANA_PORT=$${TRYOPS_GRAFANA_PORT:-13000} \
+	TRYOPS_KEYCLOAK_PORT=$${TRYOPS_KEYCLOAK_PORT:-18082} \
+	TRYOPS_KEYCLOAK_ADMIN=$${TRYOPS_KEYCLOAK_ADMIN:-tryops-admin} \
+	TRYOPS_KEYCLOAK_ADMIN_PASSWORD=$${TRYOPS_KEYCLOAK_ADMIN_PASSWORD:-tryops-local-keycloak} \
+	TRYOPS_CONTROLLER_PORT=$${TRYOPS_CONTROLLER_PORT:-18084} \
 	TRYOPS_GUARDRAIL_PORT=$${TRYOPS_GUARDRAIL_PORT:-18093} \
 	TRYOPS_API_PORT=$${TRYOPS_API_PORT:-18080} \
 	TRYOPS_GATEWAY_PORT=$${TRYOPS_GATEWAY_PORT:-18081} \
+	TRYOPS_WEB_DEV_PORT=$${TRYOPS_WEB_DEV_PORT:-$(TRYOPS_WEB_DEV_PORT)} \
 	TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN="$${TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN:-host=postgres port=5432 user=tryops password=tryops-local-postgres dbname=tryops}" \
-		docker compose up --build -d gateway prometheus grafana minio mlflow guardrail
+		docker compose $$compose_files $$compose_profiles up --build -d $$services; \
+	if [ "$$hot_reload" = "1" ] || [ "$$hot_reload" = "true" ]; then \
+		echo "Hot reload UI:        http://127.0.0.1:$${TRYOPS_WEB_DEV_PORT:-$(TRYOPS_WEB_DEV_PORT)}"; \
+		echo "Gateway/API edge:     http://127.0.0.1:$${TRYOPS_GATEWAY_PORT:-18081}"; \
+		echo "Keycloak IAM:         http://127.0.0.1:$${TRYOPS_KEYCLOAK_PORT:-18082}"; \
+		echo "Controller webhooks:  http://127.0.0.1:$${TRYOPS_CONTROLLER_PORT:-18084}"; \
+	else \
+		echo "Console + gateway:    http://127.0.0.1:$${TRYOPS_GATEWAY_PORT:-18081}"; \
+		echo "Keycloak IAM:         http://127.0.0.1:$${TRYOPS_KEYCLOAK_PORT:-18082}"; \
+		echo "Controller webhooks:  http://127.0.0.1:$${TRYOPS_CONTROLLER_PORT:-18084}"; \
+	fi
+
+app-up-hotreload:
+	$(MAKE) TRYOPS_HOT_RELOAD=1 app-up
+
+app-dev: app-up-hotreload
+
+app-prune-build-cache:
+	docker builder prune -f
+	docker image prune -f
 
 app-smoke: native-stack-smoke-build native-job-runner-build evaluation-index-sample
 	@set -eu; \
@@ -1388,7 +1441,8 @@ app-smoke: native-stack-smoke-build native-job-runner-build evaluation-index-sam
 	artifacts/native/tryops_evaluation_index --root . --output artifacts/eval/evaluation_index/evaluation_index.json
 
 app-down:
-	docker compose down
+	$(MAKE) fashn-vton-stop
+	docker compose -f docker-compose.yml -f docker-compose.hot-reload.yml down --remove-orphans
 
 roadmap-status:
 	PYTHONPATH=$(PYTHONPATH) python scripts/roadmap_status.py MLOPS_VTON_LLM_ENTERPRISE_ROADMAP.md
@@ -1409,21 +1463,81 @@ fashn-vton-venv:
 	if [ ! -d "$(FASHN_VTON_REPO)" ]; then \
 		git clone https://github.com/fashn-AI/fashn-vton-1.5.git "$(FASHN_VTON_REPO)"; \
 	fi; \
+	$(MAKE) fashn-vton-optimize-loader; \
 	"$(FASHN_VTON_PYTHON)" -m pip install -e "$(FASHN_VTON_REPO)" --no-deps; \
 	"$(FASHN_VTON_PYTHON)" -m pip install torchvision onnxruntime-gpu einops fashn-human-parser matplotlib
+
+fashn-vton-optimize-loader:
+	python3 scripts/patch_fashn_vton_gpu_loader.py "$(FASHN_VTON_REPO)"
 
 fashn-vton-download: fashn-vton-venv
 	"$(FASHN_VTON_PYTHON)" "$(FASHN_VTON_REPO)/scripts/download_weights.py" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
 
-fashn-vton-service:
+fashn-vton-service: fashn-vton-optimize-loader
 	@test -x "$(FASHN_VTON_PYTHON)" || { echo "missing $(FASHN_VTON_PYTHON); run: make fashn-vton-venv"; exit 1; }
 	@test -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" || { echo "missing FASHN weights; run: make fashn-vton-download"; exit 1; }
-	"$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton.py --host "$(FASHN_VTON_HOST)" --port "$(FASHN_VTON_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
+	CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" "$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton.py --host "$(FASHN_VTON_HOST)" --port "$(FASHN_VTON_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
 
-fashn-vton-sample:
+fashn-vton-service-bg:
+	@if [ ! -x "$(FASHN_VTON_PYTHON)" ] || [ ! -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" ]; then \
+		echo "Preparing FASHN VTON runtime. This can take a while the first time."; \
+		$(MAKE) fashn-vton-download; \
+	fi
+	@$(MAKE) fashn-vton-optimize-loader
+	@set -eu; \
+	mkdir -p "$$(dirname "$(FASHN_VTON_PID_FILE)")" "$$(dirname "$(FASHN_VTON_LOG)")"; \
+	if [ -f "$(FASHN_VTON_PID_FILE)" ]; then \
+		pid=$$(cat "$(FASHN_VTON_PID_FILE)" 2>/dev/null || true); \
+		if [ -n "$$pid" ] && kill -0 "$$pid" 2>/dev/null; then \
+			echo "FASHN VTON service already running: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_PORT)"; \
+			exit 0; \
+		fi; \
+		rm -f "$(FASHN_VTON_PID_FILE)"; \
+	fi; \
+	if curl -fsS --max-time 2 "http://127.0.0.1:$(FASHN_VTON_PORT)/health" >/dev/null 2>&1; then \
+		echo "FASHN VTON service already reachable: http://127.0.0.1:$(FASHN_VTON_PORT)"; \
+		exit 0; \
+	fi; \
+	CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" TRYOPS_FASHN_MIN_AVAILABLE_MB="$(TRYOPS_FASHN_MIN_AVAILABLE_MB)" setsid "$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton.py --host "$(FASHN_VTON_HOST)" --port "$(FASHN_VTON_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)" > "$(FASHN_VTON_LOG)" 2>&1 < /dev/null & \
+	pid=$$!; \
+	echo "$$pid" > "$(FASHN_VTON_PID_FILE)"; \
+	for _ in 1 2 3 4 5 6 7 8 9 10; do \
+		if curl -fsS --max-time 2 "http://127.0.0.1:$(FASHN_VTON_PORT)/health" >/dev/null 2>&1; then \
+			echo "FASHN VTON service started: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_PORT)"; \
+			echo "logs: $(FASHN_VTON_LOG)"; \
+			exit 0; \
+		fi; \
+		if ! kill -0 "$$pid" 2>/dev/null; then \
+			echo "FASHN VTON service exited during startup. Last logs:"; \
+			tail -80 "$(FASHN_VTON_LOG)" 2>/dev/null || true; \
+			rm -f "$(FASHN_VTON_PID_FILE)"; \
+			exit 1; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "FASHN VTON service is starting slowly: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_PORT)"; \
+	echo "logs: $(FASHN_VTON_LOG)"
+
+fashn-vton-stop:
+	@set -eu; \
+	if [ ! -f "$(FASHN_VTON_PID_FILE)" ]; then \
+		echo "FASHN VTON service is not tracked by $(FASHN_VTON_PID_FILE)"; \
+		exit 0; \
+	fi; \
+	pid=$$(cat "$(FASHN_VTON_PID_FILE)" 2>/dev/null || true); \
+	if [ -z "$$pid" ] || ! kill -0 "$$pid" 2>/dev/null; then \
+		rm -f "$(FASHN_VTON_PID_FILE)"; \
+		echo "FASHN VTON service was not running"; \
+		exit 0; \
+	fi; \
+	kill "$$pid"; \
+	rm -f "$(FASHN_VTON_PID_FILE)"; \
+	echo "FASHN VTON service stopped: pid=$$pid"
+
+fashn-vton-sample: fashn-vton-optimize-loader
 	@test -x "$(FASHN_VTON_PYTHON)" || { echo "missing $(FASHN_VTON_PYTHON); run: make fashn-vton-venv"; exit 1; }
 	@test -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" || { echo "missing FASHN weights; run: make fashn-vton-download"; exit 1; }
-	"$(FASHN_VTON_PYTHON)" scripts/run_fashn_vton_single.py --person test/model1.png --garment test/garment1.png --output test/fashn_vton_model1_garment1.png --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)" --category tops --garment-photo-type model --num-timesteps 50 --guidance-scale 1.5 --seed 555
+	CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" "$(FASHN_VTON_PYTHON)" scripts/run_fashn_vton_single.py --person test/model1.png --garment test/garment1.png --output test/fashn_vton_model1_garment1.png --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)" --category tops --garment-photo-type model --num-timesteps 50 --guidance-scale 1.5 --seed 555
 
 db-init:
 	PYTHONPATH=$(PYTHONPATH) python -c "from tryops import db; db.init_db(); print('tryops.db initialized')"

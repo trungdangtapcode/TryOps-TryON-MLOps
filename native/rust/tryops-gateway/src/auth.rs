@@ -1,10 +1,16 @@
 use std::{
+    collections::HashMap,
     env, fs,
     path::{Path, PathBuf},
-    time::{SystemTime, UNIX_EPOCH},
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use axum::http::{HeaderMap, Method, StatusCode};
+use jsonwebtoken::{
+    decode, decode_header,
+    jwk::JwkSet,
+    Algorithm, DecodingKey, Validation,
+};
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
@@ -12,6 +18,7 @@ use sha2::{Digest, Sha256};
 pub(crate) struct AuthPreflight {
     registry: ApiKeyRegistry,
     jwt_secret: Option<String>,
+    oidc: Option<OidcVerifier>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize)]
@@ -30,9 +37,22 @@ struct ApiKeyEntry {
     active: bool,
 }
 
+#[derive(Clone, Debug)]
+struct OidcVerifier {
+    issuer: Option<String>,
+    audience: Option<String>,
+    client_id: Option<String>,
+    jwks: JwkSet,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct AuthPrincipal {
     pub(crate) key_id: String,
+    pub(crate) subject: String,
+    pub(crate) email: Option<String>,
+    pub(crate) username: Option<String>,
+    pub(crate) display_name: Option<String>,
+    pub(crate) provider: &'static str,
     pub(crate) role: String,
     pub(crate) scopes: Vec<String>,
 }
@@ -50,13 +70,30 @@ struct JwtHeader {
     alg: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 struct JwtClaims {
     sub: Option<String>,
+    preferred_username: Option<String>,
+    email: Option<String>,
+    name: Option<String>,
     role: Option<String>,
     scope: Option<String>,
     scopes: Option<Vec<String>>,
+    realm_access: Option<KeycloakRealmAccess>,
+    resource_access: Option<HashMap<String, KeycloakClientAccess>>,
     exp: Option<u64>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct KeycloakRealmAccess {
+    #[serde(default)]
+    roles: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct KeycloakClientAccess {
+    #[serde(default)]
+    roles: Vec<String>,
 }
 
 fn default_active() -> bool {
@@ -64,7 +101,7 @@ fn default_active() -> bool {
 }
 
 impl AuthPreflight {
-    pub(crate) fn from_env() -> Self {
+    pub(crate) async fn from_env() -> Self {
         let registry_path = env::var("TRYOPS_GATEWAY_API_KEYS_PATH")
             .ok()
             .map(PathBuf::from)
@@ -81,6 +118,7 @@ impl AuthPreflight {
                 .ok()
                 .map(|value| value.trim().to_string())
                 .filter(|value| !value.is_empty()),
+            oidc: load_oidc_verifier_from_env().await,
         }
     }
 
@@ -89,6 +127,7 @@ impl AuthPreflight {
         Self {
             registry: load_registry(path).expect("load test API-key registry"),
             jwt_secret: None,
+            oidc: None,
         }
     }
 
@@ -97,6 +136,7 @@ impl AuthPreflight {
         Self {
             registry: ApiKeyRegistry::default(),
             jwt_secret: Some(secret.to_string()),
+            oidc: None,
         }
     }
 
@@ -123,6 +163,12 @@ impl AuthPreflight {
         if let Some(value) = query.and_then(|query| query_param(query, "api_key")) {
             return Some(Credential::ApiKey(percent_decode_component(&value)));
         }
+        if let Some(value) = query.and_then(|query| query_param(query, "access_token")) {
+            let token = percent_decode_component(&value);
+            if looks_like_jwt(&token) {
+                return Some(Credential::Jwt(token));
+            }
+        }
         if let Some(value) = header_string(headers, "x-api-key") {
             return Some(Credential::ApiKey(value));
         }
@@ -146,6 +192,11 @@ impl AuthPreflight {
         };
         let principal = AuthPrincipal {
             key_id: entry.key_id.clone(),
+            subject: entry.key_id.clone(),
+            email: None,
+            username: Some(entry.key_id.clone()),
+            display_name: Some(entry.key_id.clone()),
+            provider: "api_key",
             role: entry.role.clone(),
             scopes: entry.scopes.clone(),
         };
@@ -153,21 +204,40 @@ impl AuthPreflight {
     }
 
     fn evaluate_jwt(&self, token: &str, required_scope: &'static str) -> AuthDecision {
-        let Some(secret) = self.jwt_secret.as_deref() else {
+        let claims = if let Some(oidc) = &self.oidc {
+            match verify_rs256_jwt(token, oidc) {
+                Some(claims) => claims,
+                None => {
+                    return AuthDecision::denied(required_scope, "invalid_jwt", None);
+                }
+            }
+        } else if let Some(secret) = self.jwt_secret.as_deref() {
+            let Some(claims) = verify_hs256_jwt(token, secret.as_bytes()) else {
+                return AuthDecision::denied(required_scope, "invalid_jwt", None);
+            };
+            claims
+        } else {
             return AuthDecision::denied(required_scope, "jwt_not_configured", None);
-        };
-        let Some(claims) = verify_hs256_jwt(token, secret.as_bytes()) else {
-            return AuthDecision::denied(required_scope, "invalid_jwt", None);
         };
         if let Some(exp) = claims.exp {
             if exp < unix_now_seconds() {
                 return AuthDecision::denied(required_scope, "expired_jwt", None);
             }
         }
-        let scopes = jwt_scopes(&claims);
+        let Some(subject) = jwt_subject(&claims) else {
+            return AuthDecision::denied(required_scope, "invalid_jwt", None);
+        };
+        let roles = jwt_roles(&claims, self.oidc.as_ref().and_then(|oidc| oidc.client_id.as_deref()));
+        let scopes = jwt_scopes(&claims, &roles);
+        let role = jwt_role(&claims, &roles);
         let principal = AuthPrincipal {
-            key_id: claims.sub.unwrap_or_else(|| "jwt-subject".to_string()),
-            role: claims.role.unwrap_or_else(|| "jwt".to_string()),
+            key_id: subject.clone(),
+            subject,
+            email: claims.email,
+            username: claims.preferred_username,
+            display_name: claims.name,
+            provider: "keycloak",
+            role,
             scopes,
         };
         authorize_principal(principal, required_scope)
@@ -197,12 +267,23 @@ enum Credential {
 pub(crate) fn required_scope(method: &Method, proxy_path: &str) -> Option<&'static str> {
     match (method.as_str(), proxy_path) {
         ("GET", "/v1/auth/session") => Some("session:read"),
+        ("POST", "/v1/accounts/bootstrap") => Some("session:read"),
+        ("POST", "/v1/accounts") => Some("session:read"),
+        ("GET", "/v1/accounts") | ("GET", "/v1/profiles/search") => Some("account:read"),
+        ("GET", "/v1/account/dashboard")
+        | ("GET", "/v1/account/quota")
+        | ("GET", "/v1/account/members") => Some("account:read"),
+        (_, path) if path.starts_with("/v1/accounts/") => Some("account:read"),
+        ("POST", "/v1/llm/generate")
+        | ("POST", "/v1/vton/infer")
+        | ("POST", "/v1/vton/upload")
+        | ("POST", "/v1/vton/jobs") => Some("workload:run"),
         ("GET", "/v1/dashboard")
         | ("GET", "/v1/evaluations/summary")
         | ("GET", "/v1/history")
         | ("GET", "/v1/models")
-        | ("GET", "/v1/vton/comparison")
-        | ("GET", "/v1/artifacts/file") => Some("admin:read"),
+        | ("GET", "/v1/vton/comparison") => Some("admin:read"),
+        ("GET", "/v1/artifacts/file") => Some("account:read"),
         ("GET", path) if path.starts_with("/v1/request/") => Some("admin:read"),
         ("GET", path) if path.starts_with("/v1/lineage/") => Some("lineage:read"),
         ("POST", "/v1/lineage") => Some("lineage:create"),
@@ -222,7 +303,10 @@ pub(crate) fn auth_status(reason: &str) -> StatusCode {
 }
 
 fn authorize_principal(principal: AuthPrincipal, required_scope: &'static str) -> AuthDecision {
-    if principal.scopes.iter().any(|scope| scope == required_scope) {
+    if principal.scopes.iter().any(|scope| scope == required_scope)
+        || (required_scope == "account:read"
+            && principal.scopes.iter().any(|scope| scope == "admin:read"))
+    {
         AuthDecision {
             allowed: true,
             reason: "authorized",
@@ -246,6 +330,113 @@ fn load_registry(path: &Path) -> Result<ApiKeyRegistry, String> {
         })
         .map_err(|error| error.to_string())?;
     serde_json::from_str::<ApiKeyRegistry>(&content).map_err(|error| error.to_string())
+}
+
+async fn load_oidc_verifier_from_env() -> Option<OidcVerifier> {
+    let jwks_url = env::var("TRYOPS_GATEWAY_OIDC_JWKS_URL")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())?;
+    let issuer = optional_env("TRYOPS_GATEWAY_OIDC_ISSUER");
+    let audience = optional_env("TRYOPS_GATEWAY_OIDC_AUDIENCE");
+    let client_id = optional_env("TRYOPS_GATEWAY_OIDC_CLIENT_ID");
+    let jwks = fetch_jwks_with_retry(&jwks_url)
+        .await
+        .unwrap_or_else(|error| panic!("load TRYOPS_GATEWAY_OIDC_JWKS_URL '{jwks_url}': {error}"));
+    Some(OidcVerifier {
+        issuer,
+        audience,
+        client_id,
+        jwks,
+    })
+}
+
+async fn fetch_jwks_with_retry(url: &str) -> Result<JwkSet, String> {
+    let attempts = env::var("TRYOPS_GATEWAY_OIDC_JWKS_RETRIES")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(30);
+    let delay_ms = env::var("TRYOPS_GATEWAY_OIDC_JWKS_RETRY_DELAY_MS")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(1000);
+    let mut last_error = String::new();
+    for attempt in 0..attempts {
+        match reqwest::get(url).await {
+            Ok(response) => match response.error_for_status() {
+                Ok(response) => {
+                    return response
+                        .json::<JwkSet>()
+                        .await
+                        .map_err(|error| format!("parse JWKS: {error}"));
+                }
+                Err(error) => last_error = error.to_string(),
+            },
+            Err(error) => last_error = error.to_string(),
+        }
+        if attempt + 1 < attempts {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
+    }
+    Err(last_error)
+}
+
+fn optional_env(name: &str) -> Option<String> {
+    env::var(name)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn verify_rs256_jwt(token: &str, oidc: &OidcVerifier) -> Option<JwtClaims> {
+    let header = match decode_header(token) {
+        Ok(header) => header,
+        Err(error) => {
+            tracing::warn!(error = %error, "oidc_jwt_header_decode_failed");
+            return None;
+        }
+    };
+    if header.alg != Algorithm::RS256 {
+        tracing::warn!(algorithm = ?header.alg, "oidc_jwt_unexpected_algorithm");
+        return None;
+    }
+    let Some(kid) = header.kid else {
+        tracing::warn!("oidc_jwt_missing_kid");
+        return None;
+    };
+    let Some(jwk) = oidc.jwks.find(&kid) else {
+        tracing::warn!(kid = %kid, "oidc_jwt_unknown_kid");
+        return None;
+    };
+    let decoding_key = match DecodingKey::from_jwk(jwk) {
+        Ok(key) => key,
+        Err(error) => {
+            tracing::warn!(error = %error, kid = %kid, "oidc_jwk_decode_failed");
+            return None;
+        }
+    };
+    let mut validation = Validation::new(Algorithm::RS256);
+    if let Some(audience) = &oidc.audience {
+        validation.set_audience(&[audience]);
+    } else {
+        validation.validate_aud = false;
+    }
+    if let Some(issuer) = &oidc.issuer {
+        validation.set_issuer(&[issuer]);
+    }
+    match decode::<JwtClaims>(token, &decoding_key, &validation) {
+        Ok(data) => Some(data.claims),
+        Err(error) => {
+            tracing::warn!(
+                error = %error,
+                kid = %kid,
+                issuer = ?oidc.issuer,
+                audience = ?oidc.audience,
+                "oidc_jwt_validation_failed"
+            );
+            None
+        }
+    }
 }
 
 fn body_api_key(body: &[u8]) -> Option<String> {
@@ -349,13 +540,95 @@ fn verify_hs256_jwt(token: &str, secret: &[u8]) -> Option<JwtClaims> {
     serde_json::from_slice::<JwtClaims>(&base64url_decode(claims_segment)?).ok()
 }
 
-fn jwt_scopes(claims: &JwtClaims) -> Vec<String> {
+fn jwt_scopes(claims: &JwtClaims, roles: &[String]) -> Vec<String> {
     let mut scopes = claims.scopes.clone().unwrap_or_default();
     if let Some(scope) = &claims.scope {
         scopes.extend(scope.split_whitespace().map(ToOwned::to_owned));
     }
+    scopes.push("session:read".to_string());
+    scopes.extend(role_scopes(roles));
     scopes.sort();
     scopes.dedup();
+    scopes
+}
+
+fn jwt_subject(claims: &JwtClaims) -> Option<String> {
+    claims
+        .sub
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            claims
+                .preferred_username
+                .as_ref()
+                .map(|value| value.trim())
+                .filter(|value| !value.is_empty())
+                .map(|value| format!("keycloak:username:{value}"))
+        })
+}
+
+fn jwt_roles(claims: &JwtClaims, client_id: Option<&str>) -> Vec<String> {
+    let mut roles = Vec::new();
+    if let Some(role) = &claims.role {
+        roles.push(role.clone());
+    }
+    if let Some(realm_access) = &claims.realm_access {
+        roles.extend(realm_access.roles.iter().cloned());
+    }
+    if let (Some(resource_access), Some(client_id)) = (&claims.resource_access, client_id) {
+        if let Some(client_access) = resource_access.get(client_id) {
+            roles.extend(client_access.roles.iter().cloned());
+        }
+    }
+    roles.sort();
+    roles.dedup();
+    roles
+}
+
+fn jwt_role(claims: &JwtClaims, roles: &[String]) -> String {
+    if roles
+        .iter()
+        .any(|role| matches!(role.as_str(), "tryops_platform_admin" | "platform_admin" | "admin"))
+    {
+        return "platform_admin".to_string();
+    }
+    if roles
+        .iter()
+        .any(|role| matches!(role.as_str(), "tryops_account_owner" | "account_owner"))
+    {
+        return "account_owner".to_string();
+    }
+    if roles
+        .iter()
+        .any(|role| matches!(role.as_str(), "tryops_account_viewer" | "account_viewer" | "viewer"))
+    {
+        return "account_viewer".to_string();
+    }
+    claims.role.clone().unwrap_or_else(|| "account_member".to_string())
+}
+
+fn role_scopes(roles: &[String]) -> Vec<String> {
+    let mut scopes = vec!["account:read".to_string(), "workload:run".to_string()];
+    for role in roles {
+        match role.as_str() {
+            "tryops_platform_admin" | "platform_admin" | "admin" => scopes.extend(
+                [
+                    "admin:read",
+                    "account:write",
+                    "lineage:read",
+                    "lineage:create",
+                    "promotion:evaluate",
+                ]
+                .into_iter()
+                .map(ToOwned::to_owned),
+            ),
+            "tryops_account_owner" | "account_owner" => scopes.push("account:write".to_string()),
+            "tryops_account_viewer" | "account_viewer" | "viewer" => {
+                scopes.retain(|scope| scope != "workload:run")
+            }
+            _ => {}
+        }
+    }
     scopes
 }
 
@@ -540,6 +813,28 @@ mod tests {
     }
 
     #[test]
+    fn bearer_jwt_uses_keycloak_username_when_access_token_has_no_sub() {
+        let auth = AuthPreflight::with_jwt_secret("demo-secret");
+        let token = test_jwt(
+            "demo-secret",
+            r#"{"preferred_username":"alice","scope":"openid profile email","exp":4102444800}"#,
+        );
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "authorization",
+            HeaderValue::from_str(&format!("Bearer {token}")).unwrap(),
+        );
+
+        let decision = auth.evaluate(&headers, None, &[], "session:read");
+
+        assert!(decision.allowed);
+        assert_eq!(
+            decision.principal.unwrap().subject,
+            "keycloak:username:alice"
+        );
+    }
+
+    #[test]
     fn scopes_match_protected_proxy_routes() {
         assert_eq!(
             required_scope(&Method::GET, "/v1/evaluations/summary"),
@@ -554,7 +849,10 @@ mod tests {
             Some("promotion:evaluate")
         );
         assert_eq!(required_scope(&Method::GET, "/v1/health"), None);
-        assert_eq!(required_scope(&Method::POST, "/v1/llm/generate"), None);
+        assert_eq!(
+            required_scope(&Method::POST, "/v1/llm/generate"),
+            Some("workload:run")
+        );
     }
 
     fn test_jwt(secret: &str, claims: &str) -> String {

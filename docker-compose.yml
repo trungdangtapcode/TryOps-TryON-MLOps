@@ -18,6 +18,49 @@ services:
       timeout: 3s
       retries: 5
 
+  keycloak-db-init:
+    image: postgres:16
+    restart: "no"
+    environment:
+      PGPASSWORD: ${TRYOPS_POSTGRES_PASSWORD:-tryops-local-postgres}
+      TRYOPS_POSTGRES_USER: ${TRYOPS_POSTGRES_USER:-tryops}
+      TRYOPS_POSTGRES_DB: ${TRYOPS_POSTGRES_DB:-tryops}
+    command:
+      - /bin/sh
+      - -c
+      - |
+        owner="$${TRYOPS_POSTGRES_USER:-tryops}"
+        psql -h postgres -U "$${owner}" -d "$${TRYOPS_POSTGRES_DB:-tryops}" \
+          -c "CREATE SCHEMA IF NOT EXISTS keycloak AUTHORIZATION \"$${owner}\";"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.6.2
+    restart: unless-stopped
+    command: ["start-dev", "--import-realm", "--http-port=8080"]
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${TRYOPS_KEYCLOAK_ADMIN:-tryops-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${TRYOPS_KEYCLOAK_ADMIN_PASSWORD:-tryops-local-keycloak}
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/${TRYOPS_POSTGRES_DB:-tryops}
+      KC_DB_SCHEMA: keycloak
+      KC_DB_USERNAME: ${TRYOPS_POSTGRES_USER:-tryops}
+      KC_DB_PASSWORD: ${TRYOPS_POSTGRES_PASSWORD:-tryops-local-postgres}
+      KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KEYCLOAK_LOGLEVEL: WARN
+      JAVA_OPTS_KC_HEAP: "-Xms96m -Xmx384m"
+    mem_limit: 768m
+    ports:
+      - "${TRYOPS_KEYCLOAK_PORT:-18082}:8080"
+    volumes:
+      - ./configs/keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      keycloak-db-init:
+        condition: service_completed_successfully
+
   valkey:
     image: valkey/valkey:8-alpine
     restart: unless-stopped
@@ -166,7 +209,7 @@ services:
     environment:
       TRYOPS_CONTROLLER_ADDR: ":18082"
     ports:
-      - "${TRYOPS_CONTROLLER_PORT:-18082}:18082"
+      - "${TRYOPS_CONTROLLER_PORT:-18084}:18082"
 
   benchmark:
     profiles: ["tooling"]
@@ -204,8 +247,17 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       TRYOPS_GUARDRAIL_URL: http://guardrail:18083/v1/guardrails/evaluate
       TRYOPS_REAL_VTON_URL: ${TRYOPS_REAL_VTON_URL:-http://host.docker.internal:18101}
+      TRYOPS_QUOTA_GATEWAY_URL: http://gateway:8081
+      TRYOPS_KEYCLOAK_PUBLIC_URL: http://127.0.0.1:${TRYOPS_KEYCLOAK_PORT:-18082}
+      TRYOPS_KEYCLOAK_REALM: tryops
+      TRYOPS_KEYCLOAK_CLIENT_ID: tryops-web
+      TRYOPS_APP_POSTGRES_DSN_FILE: /run/secrets/tryops_gateway_quota_postgres_dsn
       TRYOPS_STRUCTURED_LOG_PATH: /app/artifacts/logs/api_events.jsonl
       TRYOPS_TRACE_SPAN_PATH: /app/artifacts/traces/api_spans.jsonl
+      TRYOPS_VTON_JOB_WORKERS: ${TRYOPS_VTON_JOB_WORKERS:-1}
+      TRYOPS_VTON_CONCURRENCY_FREE: ${TRYOPS_VTON_CONCURRENCY_FREE:-1}
+      TRYOPS_VTON_CONCURRENCY_TEAM: ${TRYOPS_VTON_CONCURRENCY_TEAM:-2}
+      TRYOPS_VTON_CONCURRENCY_ENTERPRISE: ${TRYOPS_VTON_CONCURRENCY_ENTERPRISE:-4}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
@@ -220,6 +272,8 @@ services:
       - ./artifacts/traces:/app/artifacts/traces
       - ./artifacts/logs:/app/artifacts/logs
       - ./reports/generated:/app/reports/generated:ro
+    secrets:
+      - tryops_gateway_quota_postgres_dsn
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
       interval: 10s
@@ -228,6 +282,7 @@ services:
     depends_on:
       - mlflow
       - guardrail
+      - keycloak
 
   gateway:
     build:
@@ -241,6 +296,12 @@ services:
       TRYOPS_GATEWAY_GUARDRAIL_URL: http://guardrail:18083/v1/guardrails/evaluate
       TRYOPS_GATEWAY_STATIC_DIR: /opt/tryops/web
       TRYOPS_GATEWAY_API_KEYS_PATH: /opt/tryops/configs/api_keys.json
+      TRYOPS_GATEWAY_OIDC_ISSUER: http://127.0.0.1:${TRYOPS_KEYCLOAK_PORT:-18082}/realms/tryops
+      TRYOPS_GATEWAY_OIDC_JWKS_URL: http://keycloak:8080/realms/tryops/protocol/openid-connect/certs
+      TRYOPS_GATEWAY_OIDC_JWKS_RETRIES: "90"
+      TRYOPS_GATEWAY_OIDC_JWKS_RETRY_DELAY_MS: "1000"
+      TRYOPS_GATEWAY_OIDC_CLIENT_ID: tryops-web
+      TRYOPS_GATEWAY_OIDC_AUDIENCE: account
       TRYOPS_GATEWAY_MAX_BODY_BYTES: "4194304"
       TRYOPS_GATEWAY_RATE_LIMIT_PER_MINUTE: "600"
       TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN_FILE: /run/secrets/tryops_gateway_quota_postgres_dsn
@@ -264,6 +325,8 @@ services:
         condition: service_healthy
       valkey:
         condition: service_healthy
+      keycloak:
+        condition: service_started
       guardrail:
         condition: service_started
       api:

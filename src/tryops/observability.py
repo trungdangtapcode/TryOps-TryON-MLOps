@@ -393,6 +393,190 @@ def render_prometheus_metrics() -> str:
     return "\n".join(lines) + "\n"
 
 
+def render_persistent_prometheus_metrics() -> str:
+    """Expose durable product metrics from the relational app database.
+
+    The in-process counters above are useful for live traffic, but they reset
+    whenever the API container restarts. Grafana dashboards should also reflect
+    the persisted product state: requests, quota usage, accounts, and members.
+    """
+
+    try:
+        from tryops import db
+        from tryops.quota import PLAN_LIMITS
+
+        conn = db.connect()
+        try:
+            request_rows = [
+                dict(row)
+                for row in db._fetchall(  # type: ignore[attr-defined]
+                    conn,
+                    """SELECT
+                           kind,
+                           COALESCE(model_alias, 'unknown') AS model_alias,
+                           status,
+                           COUNT(*) AS request_count,
+                           SUM(COALESCE(cost_usd, 0)) AS cost_usd,
+                           AVG(latency_ms) AS avg_latency_ms,
+                           MAX(latency_ms) AS max_latency_ms,
+                           AVG(vram_gb) AS avg_vram_gb,
+                           SUM(COALESCE(energy_wh, 0)) AS energy_wh,
+                           AVG(quality) AS avg_quality
+                       FROM requests
+                       GROUP BY kind, COALESCE(model_alias, 'unknown'), status""",
+                )
+            ]
+            quota_rows = [
+                dict(row)
+                for row in db._fetchall(  # type: ignore[attr-defined]
+                    conn,
+                    """SELECT period, plan, workload, dimension, SUM(used) AS used
+                       FROM tryops_quota_usage
+                       GROUP BY period, plan, workload, dimension""",
+                )
+            ]
+            account_rows = [
+                dict(row)
+                for row in db._fetchall(  # type: ignore[attr-defined]
+                    conn,
+                    "SELECT plan, status, COUNT(*) AS account_count FROM accounts GROUP BY plan, status",
+                )
+            ]
+            member_rows = [
+                dict(row)
+                for row in db._fetchall(  # type: ignore[attr-defined]
+                    conn,
+                    "SELECT role, status, COUNT(*) AS member_count FROM account_members GROUP BY role, status",
+                )
+            ]
+        finally:
+            conn.close()
+    except Exception as exc:
+        message = _label(str(exc)[:180])
+        return "\n".join(
+            [
+                "# HELP tryops_persistent_metrics_available Whether database-backed TryOps metrics rendered successfully.",
+                "# TYPE tryops_persistent_metrics_available gauge",
+                f'tryops_persistent_metrics_available{{error="{message}"}} 0',
+            ]
+        ) + "\n"
+
+    lines = [
+        "# HELP tryops_persistent_metrics_available Whether database-backed TryOps metrics rendered successfully.",
+        "# TYPE tryops_persistent_metrics_available gauge",
+        "tryops_persistent_metrics_available 1",
+        "# HELP tryops_persisted_requests_total Durable request count from the app database.",
+        "# TYPE tryops_persisted_requests_total counter",
+        "# HELP tryops_request_cost_usd Durable estimated request cost in USD from the app database.",
+        "# TYPE tryops_request_cost_usd counter",
+        "# HELP tryops_vton_latency_ms Durable VTON request latency in milliseconds.",
+        "# TYPE tryops_vton_latency_ms gauge",
+        "# HELP tryops_vton_garment_similarity Durable VTON quality/similarity score when available.",
+        "# TYPE tryops_vton_garment_similarity gauge",
+        "# HELP tryops_llm_latency_p95_ms Durable LLM latency approximation in milliseconds.",
+        "# TYPE tryops_llm_latency_p95_ms gauge",
+        "# HELP tryops_llm_quality_score Durable LLM quality score when available.",
+        "# TYPE tryops_llm_quality_score gauge",
+        "# HELP tryops_energy_wh_total Durable estimated energy usage in watt-hours.",
+        "# TYPE tryops_energy_wh_total counter",
+        "# HELP tryops_vram_gb Durable observed VRAM use in GB.",
+        "# TYPE tryops_vram_gb gauge",
+    ]
+    for row in request_rows:
+        workload = str(row.get("kind") or "unknown")
+        model_alias = str(row.get("model_alias") or "unknown")
+        status = str(row.get("status") or "unknown")
+        request_count = _metric_number(row.get("request_count"))
+        labels = _metric_labels(workload=workload, model_alias=model_alias, status=status)
+        lines.append(f"tryops_persisted_requests_total{{{labels}}} {request_count}")
+        lines.append(f"tryops_request_cost_usd{{{labels}}} {_metric_number(row.get('cost_usd'))}")
+        if workload == "vton":
+            latency = _metric_number(row.get("avg_latency_ms"))
+            if latency >= 0:
+                lines.append(f'tryops_vton_latency_ms{{{labels},stat="avg"}} {round(latency, 3)}')
+                lines.append(
+                    f'tryops_vton_latency_ms{{{labels},stat="max"}} '
+                    f"{round(_metric_number(row.get('max_latency_ms')), 3)}"
+                )
+            quality = row.get("avg_quality")
+            if quality is not None:
+                lines.append(f"tryops_vton_garment_similarity{{{labels}}} {round(_metric_number(quality), 6)}")
+        if workload == "llm":
+            latency = _metric_number(row.get("max_latency_ms"))
+            if latency >= 0:
+                lines.append(f"tryops_llm_latency_p95_ms{{{labels}}} {round(latency, 3)}")
+            quality = row.get("avg_quality")
+            if quality is not None:
+                lines.append(f"tryops_llm_quality_score{{{labels}}} {round(_metric_number(quality), 6)}")
+        energy_wh = _metric_number(row.get("energy_wh"))
+        if energy_wh:
+            lines.append(f"tryops_energy_wh_total{{{labels}}} {round(energy_wh, 6)}")
+        avg_vram_gb = row.get("avg_vram_gb")
+        if avg_vram_gb is not None:
+            lines.append(f"tryops_vram_gb{{{labels},stat=\"avg\"}} {round(_metric_number(avg_vram_gb), 6)}")
+
+    lines.extend(
+        [
+            "# HELP tryops_quota_used Durable quota used by plan, workload, dimension, and period.",
+            "# TYPE tryops_quota_used gauge",
+            "# HELP tryops_quota_limit Configured quota limit by plan, workload, dimension, and period.",
+            "# TYPE tryops_quota_limit gauge",
+            "# HELP tryops_budget_utilization_ratio Maximum quota utilization ratio by plan.",
+            "# TYPE tryops_budget_utilization_ratio gauge",
+            "# HELP tryops_llm_tokens_total Durable LLM token usage from the quota ledger.",
+            "# TYPE tryops_llm_tokens_total counter",
+            "# HELP tryops_request_cost_usd_per_1k_tokens Durable estimated request cost per 1k LLM tokens.",
+            "# TYPE tryops_request_cost_usd_per_1k_tokens gauge",
+        ]
+    )
+    utilization_by_plan: dict[str, float] = defaultdict(float)
+    total_cost_usd = sum(_metric_number(row.get("cost_usd")) for row in request_rows)
+    total_llm_tokens = 0.0
+    for row in quota_rows:
+        plan = str(row.get("plan") or "free")
+        workload = str(row.get("workload") or "unknown")
+        dimension = str(row.get("dimension") or "unknown")
+        period = str(row.get("period") or "unknown")
+        used = _metric_number(row.get("used"))
+        limit = float(PLAN_LIMITS.get(plan, {}).get(dimension, 0))
+        labels = _metric_labels(plan=plan, workload=workload, dimension=dimension, period=period)
+        lines.append(f"tryops_quota_used{{{labels}}} {used}")
+        lines.append(f"tryops_quota_limit{{{labels}}} {limit}")
+        if limit > 0:
+            utilization_by_plan[plan] = max(utilization_by_plan[plan], used / limit)
+        if dimension == "llm_tokens_per_day":
+            total_llm_tokens += used
+            lines.append(f'tryops_llm_tokens_total{{model_alias="all",plan="{_label(plan)}",period="{_label(period)}"}} {used}')
+    for plan, ratio in sorted(utilization_by_plan.items()):
+        lines.append(f'tryops_budget_utilization_ratio{{plan="{_label(plan)}"}} {round(ratio, 6)}')
+    if total_llm_tokens > 0:
+        per_1k = total_cost_usd / (total_llm_tokens / 1000.0)
+        lines.append(f'tryops_request_cost_usd_per_1k_tokens{{model_alias="all",variant="live"}} {round(per_1k, 9)}')
+    else:
+        lines.append('tryops_request_cost_usd_per_1k_tokens{model_alias="all",variant="live"} 0')
+
+    lines.extend(
+        [
+            "# HELP tryops_accounts_total Workspace account count by plan and status.",
+            "# TYPE tryops_accounts_total gauge",
+        ]
+    )
+    for row in account_rows:
+        labels = _metric_labels(plan=str(row.get("plan") or "unknown"), status=str(row.get("status") or "unknown"))
+        lines.append(f"tryops_accounts_total{{{labels}}} {_metric_number(row.get('account_count'))}")
+    lines.extend(
+        [
+            "# HELP tryops_account_members_total Workspace member count by role and status.",
+            "# TYPE tryops_account_members_total gauge",
+        ]
+    )
+    for row in member_rows:
+        labels = _metric_labels(role=str(row.get("role") or "unknown"), status=str(row.get("status") or "unknown"))
+        lines.append(f"tryops_account_members_total{{{labels}}} {_metric_number(row.get('member_count'))}")
+
+    return "\n".join(lines) + "\n"
+
+
 def reset_metrics() -> None:
     _EVENTS.clear()
     _STRUCTURED_LOGS.clear()
@@ -522,3 +706,16 @@ def _severity_number(status: Any) -> int:
 
 def _label(value: str) -> str:
     return str(value).replace("\\", "\\\\").replace('"', '\\"')
+
+
+def _metric_number(value: Any) -> float:
+    if value is None:
+        return 0.0
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _metric_labels(**labels: str) -> str:
+    return ",".join(f'{key}="{_label(value)}"' for key, value in labels.items())

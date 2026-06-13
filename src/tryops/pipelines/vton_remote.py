@@ -64,7 +64,7 @@ def run_remote_fashn_vton(
         raise RealVtonUnavailableError(f"FASHN VTON service rejected request: {message}") from exc
     except (OSError, TimeoutError, json.JSONDecodeError) as exc:
         raise RealVtonUnavailableError(
-            f"FASHN VTON service unavailable at {base_url}. Start it with `make fashn-vton-service`."
+            f"FASHN VTON service unavailable at {base_url}. Start the full app with `make app-up`."
         ) from exc
 
     if data.get("status") != "completed" or not isinstance(data.get("report"), dict):
