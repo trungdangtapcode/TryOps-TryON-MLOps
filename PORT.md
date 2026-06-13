@@ -46,7 +46,7 @@ flowchart LR
   end
 
   subgraph profiles["Profile-only"]
-    controller["18082<br/>Go controller ops profile"]
+    controller["18084<br/>Go controller ops profile"]
     tls["8443<br/>Gateway TLS profile"]
     assets["8088<br/>Web assets profile"]
   end
@@ -128,7 +128,7 @@ These services are defined in Compose but are not part of the default `make app-
 
 | Service | Default URL or port | Override variable | Profile | Notes |
 | --- | --- | --- | --- | --- |
-| Go controller | `127.0.0.1:18082` | `TRYOPS_CONTROLLER_PORT` | `ops` | Handles `/health`, `/reconcile`, `/registry/webhook`, `/github/pr-webhook`, and `/alerts/webhook`. Alertmanager page alerts target `http://controller:18082/alerts/webhook` inside the Compose network. |
+| Go controller | `127.0.0.1:18084` | `TRYOPS_CONTROLLER_PORT` | `ops` | Handles `/health`, `/reconcile`, `/registry/webhook`, `/github/pr-webhook`, and `/alerts/webhook`. Alertmanager page alerts target `http://controller:18082/alerts/webhook` inside the Compose network. |
 | Web assets server | `http://127.0.0.1:8088` | `TRYOPS_WEB_ASSETS_PORT` | `assets` | Static web-assets profile. |
 | Gateway TLS | `https://127.0.0.1:8443` | `TRYOPS_GATEWAY_TLS_PORT` | `tls` | Optional TLS gateway profile. |
 
