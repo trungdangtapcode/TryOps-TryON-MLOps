@@ -116,6 +116,29 @@ export function VtonStudio({
   }, [activeJobs, pollingJobId]);
 
   useEffect(() => {
+    if (!trackedJob) {
+      return;
+    }
+    const persistedJob = activeJobs.find((job) => job.job_id === trackedJob.job_id);
+    if (!persistedJob || isActiveVtonJob(persistedJob)) {
+      return;
+    }
+    setTrackedJob(persistedJob);
+    setPollingJobId(undefined);
+    setBusy(false);
+    if (persistedJob.result) {
+      setResult(persistedJob.result);
+      if (persistedJob.result.status === "completed") {
+        setRunError(undefined);
+      } else if (persistedJob.result.error) {
+        setRunError(`${persistedJob.result.error.code}: ${persistedJob.result.error.message}`);
+      }
+    } else if (persistedJob.error?.message) {
+      setRunError(persistedJob.error.message);
+    }
+  }, [activeJobs, trackedJob]);
+
+  useEffect(() => {
     if (!pollingJobId) {
       return undefined;
     }
@@ -540,13 +563,47 @@ function cacheBustedUrl(url: string | undefined, cacheKey: string | undefined): 
 function mergeJobs(activeJobs: VtonJobRecord[], trackedJob: VtonJobRecord | undefined): VtonJobRecord[] {
   const byId = new Map<string, VtonJobRecord>();
   for (const job of activeJobs) {
-    byId.set(job.job_id, job);
+    byId.set(job.job_id, mergeJobRecord(byId.get(job.job_id), job));
   }
   if (trackedJob) {
-    byId.set(trackedJob.job_id, trackedJob);
+    byId.set(trackedJob.job_id, mergeJobRecord(byId.get(trackedJob.job_id), trackedJob));
   }
   return Array.from(byId.values())
     .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
+}
+
+function mergeJobRecord(existing: VtonJobRecord | undefined, incoming: VtonJobRecord): VtonJobRecord {
+  if (!existing) {
+    return incoming;
+  }
+  const existingRank = jobStatusRank(existing.status);
+  const incomingRank = jobStatusRank(incoming.status);
+  if (incomingRank !== existingRank) {
+    return incomingRank > existingRank ? incoming : existing;
+  }
+  if (!existing.result && incoming.result) {
+    return incoming;
+  }
+  if (!existing.error && incoming.error) {
+    return incoming;
+  }
+  return incoming;
+}
+
+function jobStatusRank(status: string): number {
+  if (status === "completed" || status === "failed") {
+    return 4;
+  }
+  if (status === "running") {
+    return 3;
+  }
+  if (status === "queued") {
+    return 2;
+  }
+  if (status === "accepted") {
+    return 1;
+  }
+  return 0;
 }
 
 function delay(ms: number): Promise<void> {
