@@ -3,6 +3,7 @@ import { ImagePlus, Loader2, Play, Settings2, UploadCloud } from "lucide-react";
 import type { TryOpsClient } from "../api";
 import { quotaPlans, vtonAliases } from "../data";
 import { compactJson } from "../format";
+import { requestRecordsToVtonJobs } from "../jobRecords";
 import type { JobConcurrency, RequestRecord, VtonJobRecord, VtonResponse } from "../types";
 import { isActiveVtonJob, JobStatusList } from "./JobStatusList";
 import { MetricTile } from "./MetricTile";
@@ -51,7 +52,11 @@ export function VtonStudio({
   const hasRequiredAssets = hasPersonAsset && hasGarmentAsset;
   const runOutputPath = vtonOutputPath(result, outputPath);
   const runOutputUrl = client.artifactUrl(runOutputPath);
-  const visibleJobs = useMemo(() => mergeJobs(activeJobs, trackedJob), [activeJobs, trackedJob]);
+  const requestHistoryJobs = useMemo(() => requestRecordsToVtonJobs(recentRequests), [recentRequests]);
+  const visibleJobs = useMemo(
+    () => mergeJobs([...requestHistoryJobs, ...activeJobs], trackedJob),
+    [activeJobs, requestHistoryJobs, trackedJob]
+  );
   const activeJobCount = visibleJobs.filter(isActiveVtonJob).length;
   const concurrencyActive = Math.max(jobConcurrency?.active ?? 0, activeJobCount);
   const concurrencyLimit = jobConcurrency?.limit;

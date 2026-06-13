@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { RefreshCw, Search, Send, Trash2, UserPlus, UsersRound } from "lucide-react";
 import type { TryOpsClient } from "../api";
+import { requestRecordsToVtonJobs } from "../jobRecords";
 import type {
   AccountDashboard,
   AccountInvitation,
@@ -55,6 +56,7 @@ export function AccountDashboardView({
 }: AccountDashboardViewProps) {
   const account = dashboard?.account ?? quota?.account;
   const recent = dashboard?.recent_requests ?? [];
+  const visibleJobs = jobs.length > 0 ? jobs : requestRecordsToVtonJobs(recent);
   const canManage = Boolean(session?.permissions.can_manage_account);
   const [workspaceName, setWorkspaceName] = useState("");
   const [workspaceDescription, setWorkspaceDescription] = useState("");
@@ -74,7 +76,7 @@ export function AccountDashboardView({
     const email = (profile.email ?? "").trim().toLowerCase();
     return !activeMemberSubjects.has(profile.subject) && (!email || !activeMemberEmails.has(email));
   });
-  const jobSlotActive = jobConcurrency?.active ?? jobs.length;
+  const jobSlotActive = jobConcurrency?.active ?? visibleJobs.filter((job) => job.status === "accepted" || job.status === "queued" || job.status === "running").length;
   const jobSlotLimit = jobConcurrency?.limit;
   const jobSlotRemaining = jobConcurrency?.remaining ?? 0;
   const jobSlotValue = jobSlotLimit === undefined ? `${jobSlotActive} active` : `${jobSlotActive} / ${jobSlotLimit}`;
@@ -146,7 +148,7 @@ export function AccountDashboardView({
           <div className="panel-header compact">
             <h2>Job activity</h2>
             <span className="status-pill blue">
-              {jobConcurrency ? `${jobConcurrency.active} / ${jobConcurrency.limit} active` : `${jobs.length} active`}
+              {jobConcurrency ? `${jobConcurrency.active} / ${jobConcurrency.limit} active` : `${jobSlotActive} active`}
             </span>
           </div>
           {jobConcurrency ? (
@@ -154,7 +156,7 @@ export function AccountDashboardView({
               {jobConcurrency.plan} plan capacity · {jobConcurrency.remaining} slot{jobConcurrency.remaining === 1 ? "" : "s"} available · {jobConcurrency.global_workers ?? 1} global worker{jobConcurrency.global_workers === 1 ? "" : "s"}
             </p>
           ) : null}
-          <JobStatusList client={client} jobs={jobs} emptyText="No try-on jobs in this workspace yet." />
+          <JobStatusList client={client} jobs={visibleJobs} emptyText="No try-on jobs in this workspace yet." />
         </section>
 
         <section className="panel account-quota-panel">
