@@ -168,7 +168,7 @@ export function App() {
       const accountOutcomes = await Promise.allSettled([
         requestClient.accountDashboard(),
         requestClient.accountQuota(),
-        requestClient.accountJobs("active", 20),
+        requestClient.accountJobs("all", 20),
         requestClient.accountMembers(),
         activeAccountId ? requestClient.accountInvitations(activeAccountId) : Promise.resolve([])
       ]);

@@ -651,16 +651,36 @@ def create_app() -> Any:
         account_id = _optional_str(effective_payload.get("account_id"))
         plan = _optional_str(effective_payload.get("quota_plan")) or "free"
         concurrency = _vton_job_concurrency(account_id=account_id, plan=plan)
+        if concurrency["active"] >= concurrency["limit"]:
+            return structured_error(
+                request_id=request_id,
+                code="vton_job_concurrency_limit_exceeded",
+                message=(
+                    f"Workspace has {concurrency['active']} active VTON job(s), "
+                    f"which reaches the {plan} plan limit of {concurrency['limit']}."
+                ),
+                details=[
+                    {
+                        "field": "workspace_concurrency",
+                        "message": "wait for a running job to finish or upgrade the workspace plan",
+                        "active": concurrency["active"],
+                        "limit": concurrency["limit"],
+                        "plan": plan,
+                    }
+                ],
+                workload="vton",
+            )
         try:
             accepted = VTON_JOB_QUEUE.submit(
                 workload="vton",
                 request_id=request_id,
-                payload={**effective_payload, "request_id": request_id},
+                payload={**effective_payload, "request_id": request_id, "_tryops_internal_authorized": True},
                 runner=lambda job_payload: _vton_infer_impl(job_payload, request=None),
                 account_id=account_id,
                 principal_subject=_optional_str(effective_payload.get("principal_subject")),
                 active_limit=concurrency["limit"],
                 payload_metadata=sanitize_payload_metadata(workload="vton", payload=clean),
+                on_update=_persist_job_snapshot,
             )
         except JobConcurrencyLimitExceeded as exc:
             return structured_error(
@@ -707,11 +727,10 @@ def create_app() -> Any:
             "status": "ok",
             "account": account,
             "concurrency": concurrency,
-            "data": VTON_JOB_QUEUE.list(
+            "data": _list_persisted_jobs(
                 account_id=account["id"],
-                workload="vton",
+                kind="vton",
                 statuses=status_filter,
-                include_result=False,
                 limit=limit,
             ),
         }
@@ -720,7 +739,7 @@ def create_app() -> Any:
     @app.get("/vton/jobs/{job_id}")
     @app.get("/v1/vton/jobs/{job_id}")
     def vton_job_status(job_id: str, request: Request, api_key: str | None = None) -> dict[str, Any]:
-        snapshot = VTON_JOB_QUEUE.get(job_id)
+        snapshot = VTON_JOB_QUEUE.get(job_id) or _get_persisted_job(job_id)
         if snapshot is None:
             return structured_error(
                 request_id="unknown",
@@ -1352,7 +1371,9 @@ def _job_status_filter(status: str) -> set[str] | None:
 def _vton_job_concurrency(*, account_id: str | None, plan: str) -> dict[str, Any]:
     normalized_plan = plan.strip().lower() or "free"
     limit = _vton_concurrency_limit(normalized_plan)
-    active = VTON_JOB_QUEUE.active_count(account_id=account_id, workload="vton")
+    memory_active = VTON_JOB_QUEUE.active_count(account_id=account_id, workload="vton")
+    persisted_active = _count_persisted_active_jobs(account_id=account_id)
+    active = max(memory_active, persisted_active)
     return {
         "schema_version": "tryops.job_concurrency.v1",
         "workload": "vton",
@@ -1385,6 +1406,56 @@ def _env_int(name: str, *, default: int, minimum: int, maximum: int) -> int:
     except ValueError:
         return default
     return max(minimum, min(maximum, value))
+
+
+def _persist_job_snapshot(snapshot: dict[str, Any]) -> None:
+    from tryops import db
+
+    conn = db.connect()
+    try:
+        db.upsert_job_snapshot(conn, snapshot)
+    finally:
+        conn.close()
+
+
+def _get_persisted_job(job_id: str) -> dict[str, Any] | None:
+    from tryops import db
+
+    conn = db.connect()
+    try:
+        return db.get_job(conn, job_id)
+    finally:
+        conn.close()
+
+
+def _list_persisted_jobs(
+    *,
+    account_id: str,
+    kind: str,
+    statuses: set[str] | None,
+    limit: int,
+) -> list[dict[str, Any]]:
+    from tryops import db
+
+    conn = db.connect()
+    try:
+        return db.list_jobs(conn, account_id=account_id, kind=kind, statuses=statuses, limit=limit)
+    finally:
+        conn.close()
+
+
+def _count_persisted_active_jobs(account_id: str | None) -> int:
+    if not account_id:
+        return 0
+    from tryops import db
+
+    conn = db.connect()
+    try:
+        return db.count_active_jobs(conn, account_id=account_id, kind="vton")
+    except Exception:
+        return 0
+    finally:
+        conn.close()
 
 
 def _bootstrap_or_demo_account(
@@ -1445,6 +1516,10 @@ def _effective_workload_payload(
     workload: str,
     request_id: str,
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    if request is None and payload.get("_tryops_internal_authorized") is True:
+        scoped = dict(payload)
+        scoped.pop("_tryops_internal_authorized", None)
+        return scoped, _internal_account_context(scoped)
     auth = _authorize_request(request, payload.get("api_key"), required_scope="workload:run")
     if not auth["allowed"]:
         return {"_tryops_auth_error": _admin_auth_error(request_id, auth, workload)}, None
@@ -1463,6 +1538,26 @@ def _effective_workload_payload(
         output_dir = Path("artifacts/runtime/vton/accounts") / account["id"]
         scoped["output_image_path"] = str(output_dir / f"{request_id}.png")
     return scoped, account_context
+
+
+def _internal_account_context(payload: dict[str, Any]) -> dict[str, Any] | None:
+    account_id = _optional_str(payload.get("account_id"))
+    if not account_id:
+        return None
+    return {
+        "account": {
+            "id": account_id,
+            "name": account_id,
+            "slug": account_id,
+            "plan": _optional_str(payload.get("quota_plan")) or "free",
+            "status": "active",
+        },
+        "membership": {
+            "subject": _optional_str(payload.get("principal_subject")) or "internal-worker",
+            "role": "account_member",
+            "status": "active",
+        },
+    }
 
 
 def _can_manage_account(principal: dict[str, Any], account_context: dict[str, Any]) -> bool:

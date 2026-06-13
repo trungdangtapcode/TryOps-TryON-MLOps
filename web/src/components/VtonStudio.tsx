@@ -445,7 +445,7 @@ export function VtonStudio({
         <div className="fashion-saved-heading">
           <div>
             <p>Work in progress</p>
-            <h3>Running jobs</h3>
+            <h3>Job activity</h3>
           </div>
           <span className="status-pill blue">
             {concurrencyLimit === undefined ? `${activeJobCount} active` : `${concurrencyActive} / ${concurrencyLimit} active`}
@@ -456,7 +456,7 @@ export function VtonStudio({
             {jobConcurrency.plan} plan capacity · {concurrencyRemaining ?? jobConcurrency.remaining} slot{(concurrencyRemaining ?? jobConcurrency.remaining) === 1 ? "" : "s"} available · {jobConcurrency.global_workers ?? 1} global worker{jobConcurrency.global_workers === 1 ? "" : "s"}
           </p>
         ) : null}
-        <JobStatusList client={client} jobs={visibleJobs} emptyText="No active generation jobs." />
+        <JobStatusList client={client} jobs={visibleJobs} emptyText="No try-on jobs yet." />
       </section>
       <section className="fashion-saved-looks" aria-label="Saved looks">
         <div className="fashion-saved-heading">
@@ -546,7 +546,6 @@ function mergeJobs(activeJobs: VtonJobRecord[], trackedJob: VtonJobRecord | unde
     byId.set(trackedJob.job_id, trackedJob);
   }
   return Array.from(byId.values())
-    .filter((job) => isActiveVtonJob(job) || job.job_id === trackedJob?.job_id)
     .sort((left, right) => Date.parse(right.created_at) - Date.parse(left.created_at));
 }
 

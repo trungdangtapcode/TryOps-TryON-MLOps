@@ -530,6 +530,132 @@ def list_requests(
     return [_row_dict(r) for r in rows]
 
 
+# ---- async jobs -----------------------------------------------------------
+
+def upsert_job_snapshot(conn: DbConnection, snapshot: dict[str, Any]) -> str:
+    job_id = str(snapshot.get("job_id") or snapshot.get("id") or "").strip()
+    if not job_id:
+        raise ValueError("job snapshot requires job_id")
+    now = _now()
+    status = str(snapshot.get("status") or "queued").strip() or "queued"
+    result_path = _job_result_path(snapshot)
+    payload = json.dumps(snapshot)
+    _execute(
+        conn,
+        """INSERT INTO jobs (id, account_id, kind, status, created_at, updated_at, payload, result_path)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             account_id=excluded.account_id,
+             kind=excluded.kind,
+             status=excluded.status,
+             updated_at=excluded.updated_at,
+             payload=excluded.payload,
+             result_path=excluded.result_path""",
+        (
+            job_id,
+            snapshot.get("account_id") or DEMO_ACCOUNT_ID,
+            snapshot.get("workload") or snapshot.get("kind") or "vton",
+            status,
+            snapshot.get("created_at") or now,
+            now,
+            payload,
+            result_path,
+        ),
+    )
+    conn.commit()
+    return job_id
+
+
+def get_job(conn: DbConnection, job_id: str) -> dict[str, Any] | None:
+    row = _fetchone(conn, "SELECT * FROM jobs WHERE id=?", (job_id,))
+    return _job_row_to_record(row) if row else None
+
+
+def list_jobs(
+    conn: DbConnection,
+    *,
+    account_id: str | None = None,
+    kind: str | None = None,
+    statuses: set[str] | None = None,
+    limit: int = 50,
+) -> list[dict[str, Any]]:
+    clauses: list[str] = []
+    params: list[Any] = []
+    if account_id:
+        clauses.append("account_id=?")
+        params.append(account_id)
+    if kind:
+        clauses.append("kind=?")
+        params.append(kind)
+    if statuses:
+        placeholders = ",".join("?" for _ in statuses)
+        clauses.append(f"status IN ({placeholders})")
+        params.extend(sorted(statuses))
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    params.append(max(1, min(limit, 100)))
+    rows = _fetchall(conn, f"SELECT * FROM jobs {where} ORDER BY created_at DESC LIMIT ?", tuple(params))
+    return [_job_row_to_record(row) for row in rows]
+
+
+def count_active_jobs(conn: DbConnection, *, account_id: str, kind: str = "vton") -> int:
+    row = _fetchone(
+        conn,
+        "SELECT COUNT(*) n FROM jobs WHERE account_id=? AND kind=? AND status IN ('queued', 'running')",
+        (account_id, kind),
+    )
+    return int(row["n"] or 0)
+
+
+def _job_row_to_record(row: Any) -> dict[str, Any]:
+    data = _row_dict(row)
+    payload = _loads_json_object(data.get("payload"))
+    record = {
+        "schema_version": "tryops.job.v1",
+        "job_id": data.get("id"),
+        "workload": data.get("kind") or payload.get("workload") or "vton",
+        "request_id": payload.get("request_id") or data.get("id"),
+        "status": data.get("status"),
+        "created_at": data.get("created_at"),
+        "queued_at": payload.get("queued_at") or data.get("created_at"),
+        "started_at": payload.get("started_at"),
+        "completed_at": payload.get("completed_at"),
+        "account_id": data.get("account_id") or payload.get("account_id"),
+        "principal_subject": payload.get("principal_subject"),
+        "payload_metadata": payload.get("payload_metadata") or {},
+    }
+    if payload.get("error") is not None:
+        record["error"] = payload.get("error")
+    if payload.get("result") is not None:
+        record["result"] = payload.get("result")
+    return record
+
+
+def _job_result_path(snapshot: dict[str, Any]) -> str | None:
+    result = snapshot.get("result")
+    if not isinstance(result, dict):
+        return None
+    report = result.get("report")
+    if not isinstance(report, dict):
+        return None
+    output = report.get("output")
+    if not isinstance(output, dict):
+        return None
+    path = output.get("path")
+    return str(path).strip() if path else None
+
+
+def _loads_json_object(value: object) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return {}
+    try:
+        loaded = json.loads(str(value))
+    except (TypeError, ValueError):
+        return {}
+    return loaded if isinstance(loaded, dict) else {}
+
+
 # ---- accounts -------------------------------------------------------------
 
 def bootstrap_account(conn: DbConnection, principal: dict[str, Any]) -> dict[str, Any]:

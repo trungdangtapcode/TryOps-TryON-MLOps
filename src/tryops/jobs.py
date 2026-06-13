@@ -11,6 +11,7 @@ from uuid import uuid4
 
 
 JobRunner = Callable[[dict[str, Any]], dict[str, Any]]
+JobUpdateCallback = Callable[[dict[str, Any]], None]
 ACTIVE_JOB_STATUSES = {"queued", "running"}
 
 
@@ -79,6 +80,7 @@ class InMemoryJobQueue:
         principal_subject: str | None = None,
         active_limit: int | None = None,
         payload_metadata: dict[str, Any] | None = None,
+        on_update: JobUpdateCallback | None = None,
     ) -> dict[str, Any]:
         job_id = f"job-{uuid4()}"
         now = _now()
@@ -105,7 +107,9 @@ class InMemoryJobQueue:
                     )
             self._records[job_id] = record
             queue_depth = self.queue_depth_locked()
-        self._executor.submit(self._run, job_id, deepcopy(payload), runner)
+            queued_snapshot = record.to_dict(include_result=False)
+        _notify_job_update(on_update, queued_snapshot)
+        self._executor.submit(self._run, job_id, deepcopy(payload), runner, on_update)
         accepted = record.to_dict(include_result=False)
         accepted["status"] = "accepted"
         accepted["queue_depth"] = queue_depth
@@ -179,11 +183,19 @@ class InMemoryJobQueue:
             count += 1
         return count
 
-    def _run(self, job_id: str, payload: dict[str, Any], runner: JobRunner) -> None:
+    def _run(
+        self,
+        job_id: str,
+        payload: dict[str, Any],
+        runner: JobRunner,
+        on_update: JobUpdateCallback | None = None,
+    ) -> None:
         with self._lock:
             record = self._records[job_id]
             record.status = "running"
             record.started_at = _now()
+            running_snapshot = record.to_dict(include_result=False)
+        _notify_job_update(on_update, running_snapshot)
         try:
             result = runner(payload)
             status = "completed" if result.get("status") == "completed" else "failed"
@@ -194,12 +206,26 @@ class InMemoryJobQueue:
                 record.completed_at = _now()
                 if status == "failed":
                     record.error = deepcopy(result.get("error", {"code": "job_failed"}))
+                completed_snapshot = record.to_dict(include_result=True)
+            _notify_job_update(on_update, completed_snapshot)
         except Exception as exc:  # pragma: no cover - defensive job boundary
             with self._lock:
                 record = self._records[job_id]
                 record.status = "failed"
                 record.completed_at = _now()
                 record.error = {"code": "job_exception", "message": str(exc)}
+                failed_snapshot = record.to_dict(include_result=True)
+            _notify_job_update(on_update, failed_snapshot)
+
+
+def _notify_job_update(callback: JobUpdateCallback | None, snapshot: dict[str, Any]) -> None:
+    if callback is None:
+        return
+    try:
+        callback(deepcopy(snapshot))
+    except Exception:
+        # Job execution must not die because the durability side-channel failed.
+        return
 
 
 def _env_int(name: str, *, default: int, minimum: int, maximum: int) -> int:

@@ -144,7 +144,7 @@ export function AccountDashboardView({
       <div className="account-grid">
         <section className="panel panel-wide">
           <div className="panel-header compact">
-            <h2>Running jobs</h2>
+            <h2>Job activity</h2>
             <span className="status-pill blue">
               {jobConcurrency ? `${jobConcurrency.active} / ${jobConcurrency.limit} active` : `${jobs.length} active`}
             </span>
@@ -154,7 +154,7 @@ export function AccountDashboardView({
               {jobConcurrency.plan} plan capacity · {jobConcurrency.remaining} slot{jobConcurrency.remaining === 1 ? "" : "s"} available · {jobConcurrency.global_workers ?? 1} global worker{jobConcurrency.global_workers === 1 ? "" : "s"}
             </p>
           ) : null}
-          <JobStatusList client={client} jobs={jobs} emptyText="No active try-on jobs in this workspace." />
+          <JobStatusList client={client} jobs={jobs} emptyText="No try-on jobs in this workspace yet." />
         </section>
 
         <section className="panel account-quota-panel">
