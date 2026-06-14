@@ -1,0 +1,79 @@
+services:
+  loki:
+    profiles: ["observability"]
+    image: grafana/loki:3.7.2
+    restart: unless-stopped
+    mem_limit: 512m
+    command: ["-config.file=/etc/loki/loki.yml"]
+    ports:
+      - "${TRYOPS_LOKI_PORT:-13100}:3100"
+    volumes:
+      - ./infra/loki/loki.yml:/etc/loki/loki.yml:ro
+      - loki-data:/loki
+
+  tempo:
+    profiles: ["observability"]
+    image: grafana/tempo:2.8.1
+    restart: unless-stopped
+    mem_limit: 768m
+    command: ["-config.file=/etc/tempo/tempo.yml"]
+    ports:
+      - "${TRYOPS_TEMPO_PORT:-13200}:3200"
+    volumes:
+      - ./infra/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
+      - tempo-data:/var/tempo
+
+  tryops-otel-bridge:
+    profiles: ["observability"]
+    build:
+      context: .
+      dockerfile: Dockerfile.otel-bridge
+    user: "${TRYOPS_CONTAINER_UID:-1000}:${TRYOPS_CONTAINER_GID:-1000}"
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      TRYOPS_OTEL_BRIDGE_ADDR: ":19122"
+      TRYOPS_OTEL_BRIDGE_OTLP_TRACES_URL: http://otel-collector:4318/v1/traces
+      TRYOPS_OTEL_BRIDGE_TRACE_FILES: /var/lib/tryops/traces/api_spans.jsonl,/var/log/tryops/gateway_events.jsonl
+      TRYOPS_OTEL_BRIDGE_START_AT: end
+    ports:
+      - "${TRYOPS_OTEL_BRIDGE_PORT:-19122}:19122"
+    volumes:
+      - ./artifacts/logs:/var/log/tryops:ro
+      - ./artifacts/traces:/var/lib/tryops/traces:ro
+    depends_on:
+      otel-collector:
+        condition: service_started
+
+  otel-collector:
+    command: ["--config=/etc/otelcol-contrib/config-observability.yml"]
+    volumes:
+      - ./infra/otel/collector-observability.yml:/etc/otelcol-contrib/config-observability.yml:ro
+      - ./artifacts/logs:/var/log/tryops:ro
+      - ./artifacts/otel:/var/lib/tryops/otel
+    depends_on:
+      loki:
+        condition: service_started
+      tempo:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "/otelcol-contrib", "validate", "--config=/etc/otelcol-contrib/config-observability.yml"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  prometheus:
+    volumes:
+      - ./infra/prometheus/prometheus-observability.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/tryops_alerts.yml:/etc/prometheus/tryops_alerts.yml:ro
+      - ./infra/prometheus/tryops_burn_rate_alerts.yml:/etc/prometheus/tryops_burn_rate_alerts.yml:ro
+      - ./infra/prometheus/tryops_finops_alerts.yml:/etc/prometheus/tryops_finops_alerts.yml:ro
+    depends_on:
+      tryops-otel-bridge:
+        condition: service_started
+
+  grafana:
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro

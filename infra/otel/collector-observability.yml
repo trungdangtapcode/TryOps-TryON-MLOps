@@ -1,0 +1,99 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  filelog/tryops:
+    include:
+      - /var/log/tryops/*.jsonl
+    start_at: end
+    include_file_path: true
+    operators:
+      - type: json_parser
+        parse_from: body
+        on_error: drop
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 256
+    spike_limit_mib: 64
+  resource/tryops:
+    attributes:
+      - key: service.namespace
+        value: tryops
+        action: upsert
+      - key: deployment.environment
+        value: local
+        action: upsert
+  batch:
+    timeout: 5s
+    send_batch_size: 1024
+
+exporters:
+  debug:
+    verbosity: basic
+  file/traces:
+    path: /var/lib/tryops/otel/traces.jsonl
+  file/logs:
+    path: /var/lib/tryops/otel/logs.jsonl
+  file/metrics:
+    path: /var/lib/tryops/otel/metrics.jsonl
+  otlp/tempo:
+    endpoint: tempo:4317
+    tls:
+      insecure: true
+  otlphttp/loki:
+    endpoint: http://loki:3100/otlp
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+service:
+  telemetry:
+    metrics:
+      readers:
+        - pull:
+            exporter:
+              prometheus:
+                host: 0.0.0.0
+                port: 8888
+  extensions:
+    - health_check
+  pipelines:
+    traces:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/tryops
+        - batch
+      exporters:
+        - debug
+        - file/traces
+        - otlp/tempo
+    logs:
+      receivers:
+        - otlp
+        - filelog/tryops
+      processors:
+        - memory_limiter
+        - resource/tryops
+        - batch
+      exporters:
+        - debug
+        - file/logs
+        - otlphttp/loki
+    metrics:
+      receivers:
+        - otlp
+      processors:
+        - memory_limiter
+        - resource/tryops
+        - batch
+      exporters:
+        - debug
+        - file/metrics

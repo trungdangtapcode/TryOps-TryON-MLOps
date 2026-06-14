@@ -1,0 +1,15 @@
+FROM golang:1.25-alpine AS build
+
+WORKDIR /src
+COPY native/go/tryops-otel-bridge/go.mod ./
+COPY native/go/tryops-otel-bridge/*.go ./
+RUN CGO_ENABLED=0 GOFLAGS=-mod=mod go build -buildvcs=false -o /out/tryops-otel-bridge .
+
+FROM alpine:3.20
+
+RUN apk add --no-cache ca-certificates \
+    && adduser -D -H -u 10001 tryops
+COPY --from=build /out/tryops-otel-bridge /usr/local/bin/tryops-otel-bridge
+USER 10001:10001
+EXPOSE 19122
+ENTRYPOINT ["tryops-otel-bridge"]

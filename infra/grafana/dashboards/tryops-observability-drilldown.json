@@ -1,0 +1,283 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [
+    {
+      "title": "Loki Explore",
+      "type": "link",
+      "url": "/explore?left=%7B%22datasource%22:%22loki%22%7D"
+    },
+    {
+      "title": "Tempo Explore",
+      "type": "link",
+      "url": "/explore?left=%7B%22datasource%22:%22tempo%22%7D"
+    }
+  ],
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=~\"tryops-.*\"} or vector(0)",
+          "legendFormat": "{{job}} {{instance}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Scrape Target Health",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 0
+      },
+      "id": 2,
+      "targets": [
+        {
+          "expr": "redis_memory_used_bytes{job=\"tryops-valkey\"} or vector(0)",
+          "legendFormat": "memory bytes",
+          "refId": "A"
+        },
+        {
+          "expr": "redis_connected_clients{job=\"tryops-valkey\"} or vector(0)",
+          "legendFormat": "clients",
+          "refId": "B"
+        },
+        {
+          "expr": "rate(redis_commands_processed_total{job=\"tryops-valkey\"}[5m]) or vector(0)",
+          "legendFormat": "ops/sec",
+          "refId": "C"
+        }
+      ],
+      "title": "Valkey Runtime",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "redis_keys_count{job=\"tryops-valkey\",key=\"tryops:quota:*\"} or vector(0)",
+          "legendFormat": "tryops:quota:*",
+          "refId": "A"
+        }
+      ],
+      "title": "Valkey Quota Keys",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 8
+      },
+      "id": 4,
+      "targets": [
+        {
+          "expr": "sum(rate(otelcol_receiver_accepted_spans[5m])) or vector(0)",
+          "legendFormat": "accepted spans",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(otelcol_receiver_accepted_log_records[5m])) or vector(0)",
+          "legendFormat": "accepted logs",
+          "refId": "B"
+        },
+        {
+          "expr": "sum(rate(otelcol_exporter_send_failed_spans[5m])) or vector(0)",
+          "legendFormat": "failed span exports",
+          "refId": "C"
+        },
+        {
+          "expr": "sum(rate(otelcol_exporter_send_failed_log_records[5m])) or vector(0)",
+          "legendFormat": "failed log exports",
+          "refId": "D"
+        }
+      ],
+      "title": "OTel Collector Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 8
+      },
+      "id": 5,
+      "targets": [
+        {
+          "expr": "sum(rate(tryops_otel_bridge_spans_total[5m])) by (service) or vector(0)",
+          "legendFormat": "{{service}} spans/sec",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(tryops_otel_bridge_export_failures_total[5m])) or vector(0)",
+          "legendFormat": "export failures/sec",
+          "refId": "B"
+        }
+      ],
+      "title": "OTel Bridge Exports",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 8
+      },
+      "id": 6,
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "expr": "up{job=~\"tryops-loki|tryops-tempo\"} or vector(0)",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Loki and Tempo Health",
+      "type": "stat"
+    },
+    {
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "content": "Use **request_id** and **trace_id** from the TryOps UI or request contract. In observability mode, Loki receives structured logs and Tempo receives bridge-exported spans. Grafana datasource links let matching trace IDs jump from logs to traces.",
+        "mode": "markdown"
+      },
+      "title": "Trace and Log Drilldown",
+      "type": "text"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": [
+    "tryops",
+    "observability",
+    "loki",
+    "tempo",
+    "valkey"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "TryOps Observability Drilldown",
+  "uid": "tryops-observability-drilldown",
+  "version": 1
+}
