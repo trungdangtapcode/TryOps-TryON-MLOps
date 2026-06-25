@@ -72,7 +72,10 @@ export function App() {
   const [lastError, setLastError] = useState<string | undefined>();
   const [selectedAccountId, setSelectedAccountIdState] = useState(initialAccountId);
 
-  const activeApiKey = devApiKeyEnabled ? apiKey : "";
+  const localApiKeysEnabled = Boolean(authConfig?.demo_api_key_fallback)
+    || import.meta.env.VITE_TRYOPS_ENABLE_DEV_AUTH_FALLBACK === "1";
+  const professorDemoEnabled = import.meta.env.VITE_TRYOPS_ENABLE_PROFESSOR_DEMO === "1";
+  const activeApiKey = localApiKeysEnabled && devApiKeyEnabled ? apiKey : "";
   const client = useMemo(
     () => new TryOpsClient(activeApiKey, token?.accessToken ?? "", selectedAccountId),
     [activeApiKey, selectedAccountId, token?.accessToken]
@@ -88,6 +91,12 @@ export function App() {
       setDevApiKeyEnabled(false);
     }
   }, [apiKey]);
+
+  useEffect(() => {
+    if (!localApiKeysEnabled && devApiKeyEnabled) {
+      setDevApiKeyEnabled(false);
+    }
+  }, [devApiKeyEnabled, localApiKeysEnabled]);
 
   useEffect(() => {
     let cancelled = false;
@@ -264,6 +273,24 @@ export function App() {
     return new TryOpsClient(activeApiKey, nextToken.accessToken, selectedAccountId);
   }
 
+  async function refreshAccountJobs() {
+    if (!authenticated) {
+      return;
+    }
+    try {
+      const feed = await client.accountJobs("active", 20);
+      const nextJobs = feed.data ?? [];
+      setAccountJobs(nextJobs);
+      setAccountJobConcurrency(feed.concurrency);
+      storeAccountJobs(feed.account.id, nextJobs, feed.concurrency);
+    } catch (error) {
+      if (token?.accessToken && isUnauthorizedSessionError(error)) {
+        clearAuthState();
+        setLastError("Your login session was stale. Log in again.");
+      }
+    }
+  }
+
   useEffect(() => {
     if (token?.accessToken && !authConfig) {
       return;
@@ -272,18 +299,21 @@ export function App() {
   }, [authConfig, client, authenticated, token?.accessToken]);
 
   useEffect(() => {
-    if (!authenticated || accountJobs.length === 0) {
+    if (!authenticated || (activeView !== "vton" && activeView !== "account")) {
       return undefined;
     }
     const timer = window.setInterval(() => {
-      void refreshConsole();
+      void refreshAccountJobs();
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [accountJobs.length, authenticated, selectedAccountId, token?.accessToken, activeApiKey]);
+  }, [activeView, authenticated, client, selectedAccountId, token?.accessToken]);
 
   const allowedViews = useMemo<ViewKey[]>(
-    () => session?.permissions.nav?.length ? session.permissions.nav : ["vton"],
-    [session]
+    () => {
+      const views: ViewKey[] = session?.permissions.nav?.length ? session.permissions.nav : ["vton"];
+      return professorDemoEnabled ? views : views.filter((view) => view !== "demo");
+    },
+    [professorDemoEnabled, session]
   );
 
   useEffect(() => {
@@ -431,7 +461,7 @@ export function App() {
           />
         );
       case "demo":
-        return <ProfessorDemoView />;
+        return professorDemoEnabled ? <ProfessorDemoView /> : null;
       case "llm":
         return <LlmPlayground client={client} onMutate={refreshConsole} />;
       case "vton":

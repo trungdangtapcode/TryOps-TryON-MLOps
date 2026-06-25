@@ -1,15 +1,8 @@
-"""Real Transformers-backed LLM inference for the R1 tranche.
+"""Real Transformers-backed LLM inference for lab benchmarks.
 
-This replaces the deterministic stand-in in :mod:`llm_baseline` with a genuine
-small open-source instruct model executed on a GPU when one is available, while
-emitting the *exact same* ``tryops.llm_generation.v1`` artifact shape so the API
-routes, dashboards, scoring, and promotion gates need no change.
-
-Discipline (see the roadmap "Real-Tranche Acceptance"): every real component
-keeps a working degraded-mode fallback. If torch, transformers, the GPU, or the
-model download is unavailable, this module transparently falls back to the
-deterministic baseline and records ``adapter="deterministic-rule-baseline"`` so
-the artifact never lies about how it was produced.
+This module executes a genuine open-source instruct model and emits the same
+``tryops.llm_generation.v1`` artifact shape as other LLM adapters. It fails
+closed when torch, transformers, the GPU, or model weights are unavailable.
 """
 
 from __future__ import annotations
@@ -23,7 +16,6 @@ from .llm_baseline import (
     classify_prompt,
     estimate_local_cost,
     estimate_tokens,
-    generate_baseline_response,
 )
 from .llm_phase_timing import build_phase_timing
 
@@ -188,32 +180,19 @@ def generate_once(
 def generate_real_response(
     *,
     prompt: str,
-    model_alias: str = "baseline",
+    model_alias: str = "champion",
     max_tokens: int = 256,
     structured: bool = True,
     model_id: str = REAL_MODEL_TARGET,
 ) -> dict[str, Any]:
-    """Generate a real LLM response, falling back to the deterministic baseline.
-
-    Returns the same schema as :func:`generate_baseline_response`. Real runs add
-    measured ``latency_ms``, ``tokens_per_second`` (decode), and ``gpu_memory_gb``
-    (peak ``torch.cuda`` allocation) so the headline optimization metrics stop
-    being simulated.
-    """
+    """Generate a real LLM response without deterministic fallback."""
 
     clean_prompt = str(prompt).strip()
     if not clean_prompt:
         raise ValueError("prompt cannot be empty")
 
     if not real_model_available():
-        payload = generate_baseline_response(
-            prompt=clean_prompt,
-            model_alias=model_alias,
-            max_tokens=max_tokens,
-            structured=structured,
-        )
-        payload["model"]["fallback_reason"] = "torch/transformers unavailable"
-        return payload
+        raise RuntimeError("real LLM inference requires torch and transformers")
 
     try:
         import torch
@@ -255,15 +234,8 @@ def generate_real_response(
         gpu_memory_gb = (
             round(torch.cuda.max_memory_allocated() / 1e9, 6) if device == "cuda" else 0.0
         )
-    except Exception as exc:  # degraded mode: never break the contract
-        payload = generate_baseline_response(
-            prompt=clean_prompt,
-            model_alias=model_alias,
-            max_tokens=max_tokens,
-            structured=structured,
-        )
-        payload["model"]["fallback_reason"] = f"real inference failed: {type(exc).__name__}: {exc}"
-        return payload
+    except Exception as exc:
+        raise RuntimeError(f"real LLM inference failed: {type(exc).__name__}: {exc}") from exc
 
     prompt_class = classify_prompt(clean_prompt)
     safety = _safety_flags(clean_prompt, decoded)
@@ -271,6 +243,7 @@ def generate_real_response(
         input_tokens=estimate_tokens(clean_prompt),
         output_tokens=output_token_count,
     )
+    cost_estimate["basis"] = "local real Transformers inference; replace with measured infrastructure cost"
     phase_timing = build_phase_timing(
         input_tokens=int(input_ids.shape[1]),
         output_tokens=output_token_count,

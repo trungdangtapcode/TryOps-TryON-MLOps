@@ -2,18 +2,20 @@ services:
   loki:
     profiles: ["observability"]
     image: grafana/loki:3.7.2
+    user: "${TRYOPS_CONTAINER_UID:-1000}:${TRYOPS_CONTAINER_GID:-1000}"
     restart: unless-stopped
     mem_limit: 512m
-    command: ["-config.file=/etc/loki/loki.yml"]
+    command: ["-config.file=/etc/loki/loki.yml", "-ingester.wal-disk-full-threshold=0.98"]
     ports:
       - "${TRYOPS_LOKI_PORT:-13100}:3100"
     volumes:
       - ./infra/loki/loki.yml:/etc/loki/loki.yml:ro
-      - loki-data:/loki
+      - ./artifacts/observability/loki:/loki
 
   tempo:
     profiles: ["observability"]
     image: grafana/tempo:2.8.1
+    user: "${TRYOPS_CONTAINER_UID:-1000}:${TRYOPS_CONTAINER_GID:-1000}"
     restart: unless-stopped
     mem_limit: 768m
     command: ["-config.file=/etc/tempo/tempo.yml"]
@@ -21,7 +23,7 @@ services:
       - "${TRYOPS_TEMPO_PORT:-13200}:3200"
     volumes:
       - ./infra/tempo/tempo.yml:/etc/tempo/tempo.yml:ro
-      - tempo-data:/var/tempo
+      - ./artifacts/observability/tempo:/var/tempo
 
   tryops-otel-bridge:
     profiles: ["observability"]

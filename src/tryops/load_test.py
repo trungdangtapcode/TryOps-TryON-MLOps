@@ -8,7 +8,7 @@ from statistics import mean
 from time import perf_counter
 from typing import Any
 
-from tryops.pipelines.llm_baseline import generate_baseline_response
+from tryops.pipelines.llm_openai_compatible import generate_openai_compatible_response
 from tryops.run_context import build_run_context
 
 
@@ -18,7 +18,7 @@ def run_llm_load_test(
     concurrency: int,
     requests: int,
     output_path: str | Path,
-    model_alias: str = "baseline",
+    model_alias: str = "champion",
 ) -> dict[str, Any]:
     if concurrency < 1:
         raise ValueError("concurrency must be at least 1")
@@ -63,7 +63,7 @@ def run_llm_load_test(
 
 def _single_request(index: int, prompt: str, model_alias: str) -> dict[str, Any]:
     started = perf_counter()
-    response = generate_baseline_response(prompt=prompt, model_alias=model_alias, structured=False)
+    response = generate_openai_compatible_response(prompt=prompt, model_alias=model_alias, structured=False)
     wall_ms = round((perf_counter() - started) * 1000.0, 3)
     return {
         "index": index,

@@ -7,8 +7,7 @@ latency/throughput samples are gated by the native C++ ``tryops_perf_stats``
 engine so the SLO verdict comes from the production-language boundary.
 
 Pure-Python frontier math (:func:`pareto_frontier`) is unit-tested without a GPU;
-the GPU sweep degrades to the deterministic baseline when torch/bitsandbytes are
-unavailable so the contract never breaks.
+the GPU sweep marks variants unavailable when torch/bitsandbytes are missing.
 """
 
 from __future__ import annotations
@@ -108,7 +107,7 @@ def _run_variant(
     adapter = f"transformers-{variant}"
 
     if not real_available:
-        adapter = "deterministic-baseline-fallback"
+        adapter = "real-transformers-unavailable"
         error = "torch/transformers unavailable"
     else:
         try:
@@ -131,7 +130,7 @@ def _run_variant(
         except Exception as exc:  # degraded mode per variant
             error = f"{type(exc).__name__}: {exc}"
 
-    if not latencies:  # fallback / failure: emit a contract-shaped empty record
+    if not latencies:  # unavailable/failure: emit a contract-shaped empty record
         return {
             "variant": variant,
             "adapter": adapter,

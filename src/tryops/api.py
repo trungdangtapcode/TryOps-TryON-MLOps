@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 from time import perf_counter
 from typing import Any
+from urllib.parse import unquote
 from uuid import uuid4
 
 from tryops.api_contracts import (
@@ -45,14 +46,25 @@ from tryops.observability import (
     render_prometheus_metrics,
     sanitize_payload_metadata,
 )
-from tryops.pipelines.llm_baseline import estimate_tokens, generate_baseline_response
+from tryops.pipelines.llm_baseline import estimate_tokens
+from tryops.pipelines.llm_openai_compatible import (
+    RealLLMUnavailableError,
+    generate_openai_compatible_response,
+)
 from tryops.pipelines.vton_baseline import run_naive_overlay_baseline
 from tryops.pipelines.vton_remote import RealVtonUnavailableError, run_remote_fashn_vton
 from tryops.policy import evaluate_promotion
 from tryops.quota import check_and_record_quota
 from tryops.quota_read_model import load_quota_read_model
 from tryops.routing import build_experiment_routing_decision, build_routing_decision
-from tryops.semantic_cache import GLOBAL_SEMANTIC_CACHE, build_cache_metadata
+from tryops.runtime_artifacts import (
+    RuntimeArtifactError,
+    account_object_key,
+    artifact_id_from_ref,
+    artifact_uri,
+    storage_from_env,
+)
+from tryops.semantic_cache import DEFAULT_NATIVE_SEMANTIC_CACHE_CLI, GLOBAL_SEMANTIC_CACHE, build_cache_metadata
 from tryops.simple_image import PNG_SIGNATURE, read_png_rgb, write_png_rgb
 from tryops.timeouts import RequestTimeoutError, run_with_timeout, timeout_details
 from tryops.vton_native_bridge import build_native_vton_execution_evidence
@@ -60,13 +72,45 @@ from tryops.vton_native_bridge import build_native_vton_execution_evidence
 try:
     from fastapi import FastAPI, Request, Response
     from fastapi.middleware.cors import CORSMiddleware
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, StreamingResponse
 except ImportError:  # pragma: no cover - optional runtime dependency
     FastAPI = None  # type: ignore[assignment]
     Request = None  # type: ignore[assignment]
     CORSMiddleware = None  # type: ignore[assignment]
     Response = None  # type: ignore[assignment]
     FileResponse = None  # type: ignore[assignment]
+    StreamingResponse = None  # type: ignore[assignment]
+
+
+def _truthy_env(name: str) -> bool:
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _deterministic_baseline_allowed() -> bool:
+    return _truthy_env("TRYOPS_ALLOW_DETERMINISTIC_BASELINE")
+
+
+def _native_semantic_cache_ready() -> bool:
+    cli = Path(str(os.environ.get("TRYOPS_NATIVE_SEMANTIC_CACHE_CLI", DEFAULT_NATIVE_SEMANTIC_CACHE_CLI)))
+    return cli.exists() and os.access(cli, os.X_OK)
+
+
+def _baseline_disabled_error(*, request_id: str, workload: str, field: str = "model_alias") -> dict[str, Any]:
+    return structured_error(
+        request_id=request_id,
+        code="deterministic_baseline_disabled",
+        message="Deterministic baseline routes are disabled for production traffic",
+        details=[
+            {
+                "field": field,
+                "message": (
+                    "use champion/challenger/candidate backed by real model serving, "
+                    "or set TRYOPS_ALLOW_DETERMINISTIC_BASELINE=1 only for diagnostics"
+                ),
+            }
+        ],
+        workload=workload,
+    )
 
 
 def create_app() -> Any:
@@ -467,11 +511,22 @@ def create_app() -> Any:
         if not _can_run_workload(auth["principal"], account_context):
             return _account_permission_error(auth, "missing_workload_member_role", request_id=request_id, workload="vton_upload")
         try:
-            upload = _store_vton_upload(payload, account_id=account_context["account"]["id"])
+            upload = _store_vton_upload(
+                payload,
+                account_id=account_context["account"]["id"],
+                request_id=request_id,
+            )
         except ValueError as exc:
             return structured_error(
                 request_id=request_id,
                 code="invalid_vton_upload",
+                message=str(exc),
+                workload="vton",
+            )
+        except Exception as exc:
+            return structured_error(
+                request_id=request_id,
+                code="artifact_storage_unavailable",
                 message=str(exc),
                 workload="vton",
             )
@@ -504,6 +559,8 @@ def create_app() -> Any:
         if "_tryops_auth_error" in effective_payload:
             return effective_payload["_tryops_auth_error"]
         clean, errors = validate_vton_payload(effective_payload)
+        clean["request_id"] = request_id
+        clean["job_id"] = _optional_str(effective_payload.get("job_id"))
         if errors:
             response = structured_error(
                 request_id=request_id,
@@ -512,6 +569,10 @@ def create_app() -> Any:
                 details=errors,
                 workload="vton",
             )
+            _record(endpoint, request_id, "vton", clean["model_alias"], started, effective_payload, response)
+            return response
+        if clean["model_alias"] == "baseline" and not _deterministic_baseline_allowed():
+            response = _baseline_disabled_error(request_id=request_id, workload="vton")
             _record(endpoint, request_id, "vton", clean["model_alias"], started, effective_payload, response)
             return response
         routing = build_routing_decision(
@@ -550,24 +611,35 @@ def create_app() -> Any:
             )
             _record(endpoint, request_id, "vton", routing["primary_alias"], started, effective_payload, response)
             return response
+        cleanup_paths: list[Path] = []
         try:
+            runtime_clean, cleanup_paths = _materialize_vton_artifact_inputs(
+                clean,
+                account_id=_optional_str(effective_payload.get("account_id")) or "acct_demo",
+                request_id=request_id,
+            )
             report = run_with_timeout(
                 lambda: _run_vton_adapter(
                     adapter=adapter,
-                    clean=clean,
+                    clean=runtime_clean,
                 ),
-                timeout_ms=clean["timeout_ms"],
+                timeout_ms=runtime_clean["timeout_ms"],
                 operation_name="vton-infer",
             )
             native_vton = build_native_vton_execution_evidence(
                 report=report,
-                person_image_path=clean["person_image_path"],
+                person_image_path=runtime_clean["person_image_path"],
             )
             report["native_execution"] = native_vton
             if native_vton["quality_score"] is not None:
                 report["metrics"]["native_quality_score"] = native_vton["quality_score"]
             report["metrics"]["native_image_quality"] = native_vton["image_metrics"]
             _write_vton_report_sidecar(report)
+            _persist_vton_runtime_artifacts(
+                report=report,
+                account_id=_optional_str(effective_payload.get("account_id")) or "acct_demo",
+                request_id=request_id,
+            )
             quota = check_and_record_quota(
                 user_id=clean["user_id"],
                 plan=clean["quota_plan"],
@@ -592,6 +664,17 @@ def create_app() -> Any:
             )
             _record(endpoint, request_id, "vton", routing["primary_alias"], started, effective_payload, response)
             return response
+        except RuntimeArtifactError as exc:
+            response = structured_error(
+                request_id=request_id,
+                code="artifact_storage_unavailable",
+                message=str(exc),
+                workload="vton",
+            )
+            response["routing"] = routing
+            response["quota"] = quota
+            _record(endpoint, request_id, "vton", routing["primary_alias"], started, effective_payload, response)
+            return response
         except RequestTimeoutError as exc:
             response = structured_error(
                 request_id=request_id,
@@ -609,7 +692,7 @@ def create_app() -> Any:
                 request_id=request_id,
                 code="real_vton_unavailable",
                 message=str(exc),
-                details=[{"field": "model_alias", "message": "use baseline only for diagnostics"}],
+                details=[{"field": "TRYOPS_REAL_VTON_URL", "message": "start the FASHN VTON service"}],
                 workload="vton",
             )
             response["routing"] = routing
@@ -625,6 +708,8 @@ def create_app() -> Any:
             )
             _record(endpoint, request_id, "vton", routing["primary_alias"], started, effective_payload, response)
             return response
+        finally:
+            _cleanup_runtime_paths(cleanup_paths)
 
     @app.post("/api/vton/jobs")
     @app.post("/vton/jobs")
@@ -648,6 +733,8 @@ def create_app() -> Any:
                 details=errors,
                 workload="vton",
             )
+        if clean["model_alias"] == "baseline" and not _deterministic_baseline_allowed():
+            return _baseline_disabled_error(request_id=request_id, workload="vton")
         account_id = _optional_str(effective_payload.get("account_id"))
         plan = _optional_str(effective_payload.get("quota_plan")) or "free"
         concurrency = _vton_job_concurrency(account_id=account_id, plan=plan)
@@ -722,17 +809,25 @@ def create_app() -> Any:
         account = account_context["account"]
         status_filter = _job_status_filter(status)
         concurrency = _vton_job_concurrency(account_id=account["id"], plan=account["plan"])
+        persisted_jobs = _list_persisted_jobs(
+            account_id=account["id"],
+            kind="vton",
+            statuses=status_filter,
+            limit=limit,
+        )
+        live_jobs = VTON_JOB_QUEUE.list(
+            account_id=account["id"],
+            workload="vton",
+            statuses=status_filter,
+            include_result=True,
+            limit=limit,
+        )
         return {
             "schema_version": "tryops.account_jobs.v1",
             "status": "ok",
             "account": account,
             "concurrency": concurrency,
-            "data": _list_persisted_jobs(
-                account_id=account["id"],
-                kind="vton",
-                statuses=status_filter,
-                limit=limit,
-            ),
+            "data": _merge_job_records(persisted_jobs, live_jobs, limit=limit),
         }
 
     @app.get("/api/vton/jobs/{job_id}")
@@ -815,6 +910,25 @@ def create_app() -> Any:
             response["guardrails"] = ingress_guardrails["verdict"]
             _record(endpoint, request_id, "llm", clean["model_alias"], started, effective_payload, response)
             return response
+        if clean["fallback_enabled"]:
+            response = structured_error(
+                request_id=request_id,
+                code="fallback_disabled",
+                message="LLM fallback is disabled; configure a real model endpoint instead",
+                details=[
+                    {
+                        "field": "fallback_enabled",
+                        "message": "set fallback_enabled=false; production LLM traffic must use a real model",
+                    }
+                ],
+                workload="llm",
+            )
+            _record(endpoint, request_id, "llm", clean["model_alias"], started, effective_payload, response)
+            return response
+        if clean["model_alias"] == "baseline" and not _deterministic_baseline_allowed():
+            response = _baseline_disabled_error(request_id=request_id, workload="llm")
+            _record(endpoint, request_id, "llm", clean["model_alias"], started, effective_payload, response)
+            return response
         try:
             if clean["routing_mode"] in {"experiment_ab", "experiment_bandit"}:
                 routing = build_experiment_routing_decision(
@@ -834,12 +948,11 @@ def create_app() -> Any:
                     routing_mode=clean["routing_mode"],
                     canary_percent=clean["canary_percent"],
                     shadow=clean["shadow"],
-                    fallback_enabled=clean["fallback_enabled"],
+                    fallback_enabled=False,
                     route_health={
-                        "baseline": "ready",
-                        "champion": "ready" if clean["optimized_available"] else "unavailable",
-                        "challenger": "ready" if clean["optimized_available"] else "unavailable",
-                        "candidate": "ready" if clean["optimized_available"] else "unavailable",
+                        "champion": "configured",
+                        "challenger": "configured",
+                        "candidate": "configured",
                     },
                 )
             quota = check_and_record_quota(
@@ -860,9 +973,57 @@ def create_app() -> Any:
                 response["quota"] = quota
                 _record(endpoint, request_id, "llm", routing["primary_alias"], started, effective_payload, response)
                 return response
+            if routing["primary_alias"] == "baseline" and not _deterministic_baseline_allowed():
+                response = _baseline_disabled_error(request_id=request_id, workload="llm", field="experiment_variants")
+                response["routing"] = routing
+                response["quota"] = quota
+                _record(endpoint, request_id, "llm", routing["primary_alias"], started, effective_payload, response)
+                return response
             generation_prompt = ingress_guardrails["prompt_for_generation"]
             cache_prompt = f"model={routing['primary_alias']} structured={clean['structured']} prompt={generation_prompt}"
-            cache_allowed = clean["semantic_cache_enabled"] and not ingress_guardrails["redaction"].replacements
+            cache_requested = clean["semantic_cache_enabled"]
+            if cache_requested and not _truthy_env("TRYOPS_ALLOW_LLM_SEMANTIC_CACHE"):
+                response = structured_error(
+                    request_id=request_id,
+                    code="semantic_cache_disabled",
+                    message="LLM semantic cache is disabled for production traffic",
+                    details=[
+                        {
+                            "field": "semantic_cache_enabled",
+                            "message": "set semantic_cache_enabled=false unless a production semantic cache is configured",
+                        }
+                    ],
+                    workload="llm",
+                )
+                response["routing"] = routing
+                response["quota"] = quota
+                _record(endpoint, request_id, "llm", routing["primary_alias"], started, effective_payload, response)
+                return response
+            if (
+                cache_requested
+                and not _native_semantic_cache_ready()
+                and not _truthy_env("TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE")
+            ):
+                response = structured_error(
+                    request_id=request_id,
+                    code="semantic_cache_native_unavailable",
+                    message="Semantic cache requires the native semantic cache CLI for production traffic",
+                    details=[
+                        {
+                            "field": "TRYOPS_NATIVE_SEMANTIC_CACHE_CLI",
+                            "message": (
+                                "build artifacts/native/tryops_semantic_cache_cli, or set "
+                                "TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE=1 only for diagnostics"
+                            ),
+                        }
+                    ],
+                    workload="llm",
+                )
+                response["routing"] = routing
+                response["quota"] = quota
+                _record(endpoint, request_id, "llm", routing["primary_alias"], started, effective_payload, response)
+                return response
+            cache_allowed = cache_requested and not ingress_guardrails["redaction"].replacements
             cache_lookup: dict[str, Any] | None = None
             cached_generation: dict[str, Any] | None = None
             if cache_allowed:
@@ -881,11 +1042,12 @@ def create_app() -> Any:
                 )
             else:
                 response = run_with_timeout(
-                    lambda: generate_baseline_response(
+                    lambda: generate_openai_compatible_response(
                         prompt=generation_prompt,
                         model_alias=routing["primary_alias"],
                         max_tokens=clean["max_tokens"],
                         structured=clean["structured"],
+                        timeout_seconds=clean["timeout_ms"] / 1000.0,
                     ),
                     timeout_ms=clean["timeout_ms"],
                     operation_name="llm-generate",
@@ -898,11 +1060,12 @@ def create_app() -> Any:
                 response["account"] = account_context["account"]
             if cached_generation is None and "shadow_alias" in routing:
                 shadow = run_with_timeout(
-                    lambda: generate_baseline_response(
+                    lambda: generate_openai_compatible_response(
                         prompt=generation_prompt,
                         model_alias=str(routing["shadow_alias"]),
                         max_tokens=clean["max_tokens"],
                         structured=False,
+                        timeout_seconds=clean["timeout_ms"] / 1000.0,
                     ),
                     timeout_ms=clean["timeout_ms"],
                     operation_name="llm-shadow",
@@ -948,6 +1111,33 @@ def create_app() -> Any:
                 model_alias=routing["primary_alias"],
             )
             _record(endpoint, request_id, "llm", routing["primary_alias"], started, effective_payload, response)
+            return response
+        except RealLLMUnavailableError as exc:
+            response = structured_error(
+                request_id=request_id,
+                code="real_llm_unavailable",
+                message=str(exc),
+                details=[
+                    {
+                        "field": "TRYOPS_LLM_BASE_URL",
+                        "message": "start vLLM/OpenAI-compatible serving and point the API at it",
+                    }
+                ],
+                workload="llm",
+            )
+            if "routing" in locals():
+                response["routing"] = routing
+            if "quota" in locals():
+                response["quota"] = quota
+            _record(
+                endpoint,
+                request_id,
+                "llm",
+                routing["primary_alias"] if "routing" in locals() else clean["model_alias"],
+                started,
+                effective_payload,
+                response,
+            )
             return response
         except RequestTimeoutError as exc:
             response = structured_error(
@@ -1205,6 +1395,31 @@ def create_app() -> Any:
             return _admin_auth_error("unknown", auth, "artifact")
         try:
             account_context = _bootstrap_or_demo_account(auth["principal"], request=request)
+            artifact = _artifact_record_for_ref(path)
+            if artifact is not None:
+                if not _artifact_record_allowed(artifact, account_context["account"]["id"], auth["principal"]):
+                    return structured_error(
+                        request_id="unknown",
+                        code="artifact_forbidden",
+                        message="artifact path is outside this account workspace",
+                        workload="artifact",
+                    )
+                if str(artifact.get("backend") or "") != "minio":
+                    legacy_path = str(artifact.get("legacy_path") or "")
+                    if not legacy_path:
+                        raise RuntimeError("artifact object does not have a readable backend")
+                    path = legacy_path
+                else:
+                    storage = storage_from_env()
+                    object_key = str(artifact.get("object_key") or "")
+                    if storage is None or not object_key:
+                        raise RuntimeError("MinIO runtime artifact storage is not configured")
+                    if StreamingResponse is None:
+                        raise RuntimeError("FastAPI streaming responses are unavailable")
+                    return StreamingResponse(
+                        storage.stream_object(object_key=object_key),
+                        media_type=str(artifact.get("content_type") or "application/octet-stream"),
+                    )
             if not _artifact_allowed(path, account_context["account"]["id"], auth["principal"]):
                 return structured_error(
                     request_id="unknown",
@@ -1283,7 +1498,8 @@ def _auth_config() -> dict[str, Any]:
         "logout_endpoint": f"{issuer}/protocol/openid-connect/logout",
         "account_console_endpoint": f"{issuer}/account/",
         "scopes": "openid profile email",
-        "demo_api_key_fallback": True,
+        "demo_api_key_fallback": _truthy_env("TRYOPS_ENABLE_DEV_API_KEY_FALLBACK")
+        or _truthy_env("TRYOPS_ENABLE_LOCAL_API_KEYS"),
     }
 
 
@@ -1313,8 +1529,8 @@ def _gateway_principal(request: Any) -> dict[str, Any] | None:
     if request is None:
         return None
     headers = getattr(request, "headers", {})
-    key_id = str(headers.get("x-tryops-auth-key-id", "")).strip()
-    subject = str(headers.get("x-tryops-auth-subject", "")).strip() or key_id
+    key_id = _gateway_text_header(headers, "x-tryops-auth-key-id")
+    subject = _gateway_text_header(headers, "x-tryops-auth-subject") or key_id
     if not subject:
         return None
     scopes = sorted(
@@ -1327,13 +1543,44 @@ def _gateway_principal(request: Any) -> dict[str, Any] | None:
     return {
         "key_id": key_id or subject,
         "subject": subject,
-        "provider": str(headers.get("x-tryops-auth-provider", "gateway")).strip() or "gateway",
-        "role": str(headers.get("x-tryops-auth-role", "user")).strip() or "user",
-        "email": str(headers.get("x-tryops-auth-email", "")).strip(),
-        "username": str(headers.get("x-tryops-auth-username", "")).strip(),
-        "display_name": str(headers.get("x-tryops-auth-display-name", "")).strip(),
+        "provider": _gateway_text_header(headers, "x-tryops-auth-provider") or "gateway",
+        "role": _gateway_text_header(headers, "x-tryops-auth-role") or "user",
+        "email": _gateway_text_header(headers, "x-tryops-auth-email"),
+        "username": _gateway_text_header(headers, "x-tryops-auth-username"),
+        "display_name": _gateway_text_header(headers, "x-tryops-auth-display-name"),
         "scopes": scopes,
     }
+
+
+def _gateway_text_header(headers: Any, name: str) -> str:
+    encoded = str(headers.get(f"{name}-utf8", "")).strip()
+    if encoded:
+        try:
+            return _repair_mojibake(unquote(encoded, encoding="utf-8", errors="strict")).strip()
+        except UnicodeError:
+            pass
+    return _repair_mojibake(str(headers.get(name, "")).strip()).strip()
+
+
+def _repair_mojibake(value: str) -> str:
+    text = value.strip()
+    if not text:
+        return text
+    if not any(marker in text for marker in ("Ã", "Â", "áº", "á»", "àº", "à»")):
+        return text
+    for encoding in ("latin1", "cp1252"):
+        try:
+            candidate = text.encode(encoding).decode("utf-8")
+        except UnicodeError:
+            continue
+        if candidate and _mojibake_score(candidate) < _mojibake_score(text):
+            return candidate
+    return text
+
+
+def _mojibake_score(value: str) -> int:
+    markers = ("Ã", "Â", "áº", "á»", "àº", "à»", "\ufffd")
+    return sum(value.count(marker) for marker in markers)
 
 
 def _selected_account_id(request: Any = None) -> str | None:
@@ -1410,12 +1657,14 @@ def _env_int(name: str, *, default: int, minimum: int, maximum: int) -> int:
 
 def _persist_job_snapshot(snapshot: dict[str, Any]) -> None:
     from tryops import db
+    from tryops.observability import emit_job_structured_log
 
     conn = db.connect()
     try:
         db.upsert_job_snapshot(conn, snapshot)
     finally:
         conn.close()
+    emit_job_structured_log(snapshot)
 
 
 def _get_persisted_job(job_id: str) -> dict[str, Any] | None:
@@ -1442,6 +1691,42 @@ def _list_persisted_jobs(
         return db.list_jobs(conn, account_id=account_id, kind=kind, statuses=statuses, limit=limit)
     finally:
         conn.close()
+
+
+def _merge_job_records(
+    persisted_jobs: list[dict[str, Any]],
+    live_jobs: list[dict[str, Any]],
+    *,
+    limit: int,
+) -> list[dict[str, Any]]:
+    by_id: dict[str, dict[str, Any]] = {}
+    for job in [*persisted_jobs, *live_jobs]:
+        job_id = str(job.get("job_id") or job.get("id") or "").strip()
+        if not job_id:
+            continue
+        existing = by_id.get(job_id)
+        if existing is None or _job_record_rank(job) >= _job_record_rank(existing):
+            by_id[job_id] = job
+    return sorted(
+        by_id.values(),
+        key=lambda item: str(item.get("created_at") or ""),
+        reverse=True,
+    )[: max(1, min(limit, 100))]
+
+
+def _job_record_rank(job: dict[str, Any]) -> tuple[int, int, int]:
+    status_rank = {
+        "accepted": 1,
+        "queued": 2,
+        "running": 3,
+        "completed": 4,
+        "failed": 4,
+    }.get(str(job.get("status") or ""), 0)
+    return (
+        status_rank,
+        1 if job.get("result") is not None else 0,
+        1 if job.get("error") is not None else 0,
+    )
 
 
 def _count_persisted_active_jobs(account_id: str | None) -> int:
@@ -1602,6 +1887,175 @@ def _artifact_allowed(path: str, account_id: str, principal: dict[str, Any]) -> 
     return any(normalized == prefix or prefix in normalized.parents for prefix in allowed_prefixes)
 
 
+def _artifact_record_for_ref(path: str) -> dict[str, Any] | None:
+    artifact_id = artifact_id_from_ref(path)
+    if not artifact_id:
+        return None
+    from tryops import db
+
+    conn = db.connect()
+    try:
+        return db.get_artifact_object(conn, artifact_id)
+    finally:
+        conn.close()
+
+
+def _artifact_record_allowed(
+    artifact: dict[str, Any],
+    account_id: str,
+    principal: dict[str, Any],
+) -> bool:
+    if "admin:read" in set(principal.get("scopes", [])):
+        return True
+    return str(artifact.get("account_id") or "") == account_id
+
+
+def _host_visible_runtime_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(path)
+
+
+def _materialize_vton_artifact_inputs(
+    clean: dict[str, Any],
+    *,
+    account_id: str,
+    request_id: str,
+) -> tuple[dict[str, Any], list[Path]]:
+    runtime_clean = dict(clean)
+    cleanup_paths: list[Path] = []
+    for field, role in (("person_image_path", "person"), ("garment_image_path", "garment")):
+        value = str(runtime_clean.get(field) or "")
+        artifact_id = artifact_id_from_ref(value)
+        if not artifact_id:
+            continue
+        artifact = _artifact_record_for_ref(value)
+        if artifact is None:
+            raise RuntimeArtifactError(f"artifact not found: {value}")
+        artifact_account_id = str(artifact.get("account_id") or "")
+        if artifact_account_id and artifact_account_id != account_id:
+            raise RuntimeArtifactError(f"artifact is outside this account workspace: {value}")
+        if str(artifact.get("backend") or "") != "minio":
+            legacy_path = str(artifact.get("legacy_path") or "")
+            if not legacy_path:
+                raise RuntimeArtifactError(f"artifact does not have a materializable backend: {value}")
+            runtime_clean[field] = legacy_path
+            continue
+        storage = storage_from_env()
+        object_key = str(artifact.get("object_key") or "")
+        if storage is None or not object_key:
+            raise RuntimeArtifactError("MinIO runtime artifact storage is not configured")
+        scratch_dir = Path("artifacts/runtime/vton/materialized") / account_id / request_id
+        suffix = Path(object_key).suffix or ".png"
+        materialized = storage.materialize_to_temp(
+            object_key=object_key,
+            scratch_dir=scratch_dir,
+            filename=f"{role}{suffix}",
+        )
+        runtime_clean[field] = _host_visible_runtime_path(materialized)
+        cleanup_paths.append(materialized)
+    return runtime_clean, cleanup_paths
+
+
+def _persist_vton_runtime_artifacts(
+    *,
+    report: dict[str, Any],
+    account_id: str,
+    request_id: str,
+) -> None:
+    storage = storage_from_env()
+    if storage is None:
+        return
+    output = report.get("output")
+    if not isinstance(output, dict):
+        return
+    output_path_text = str(output.get("path") or "").strip()
+    if not output_path_text or artifact_id_from_ref(output_path_text):
+        return
+    output_path = Path(output_path_text)
+    if not output_path.is_file():
+        raise RuntimeArtifactError(f"VTON output file does not exist: {output_path}")
+    image = read_png_rgb(output_path)
+    output_object_key = account_object_key(account_id, "requests", request_id, "output.png")
+    output_metadata = storage.put_file(
+        object_key=output_object_key,
+        path=output_path,
+        content_type="image/png",
+    )
+    from tryops import db
+
+    conn = db.connect()
+    try:
+        output_artifact_id = db.insert_artifact_object(
+            conn,
+            {
+                **output_metadata,
+                "account_id": account_id,
+                "request_id": request_id,
+                "role": "vton_output",
+                "legacy_path": str(output_path),
+                "content_type": "image/png",
+                "width": image.width,
+                "height": image.height,
+                "status": "active",
+            },
+        )
+        output_ref = artifact_uri(output_artifact_id)
+        output["legacy_path"] = str(output_path)
+        output["path"] = output_ref
+        output["url"] = artifact_url(output_ref)
+        output["storage"] = {
+            "backend": "minio",
+            "bucket": output_metadata["bucket"],
+            "object_key": output_metadata["object_key"],
+            "artifact_id": output_artifact_id,
+        }
+        report_object_key = account_object_key(account_id, "requests", request_id, "report.json")
+        report_bytes = json.dumps(report, indent=2, sort_keys=True).encode("utf-8")
+        report_metadata = storage.put_bytes(
+            object_key=report_object_key,
+            data=report_bytes,
+            content_type="application/json",
+        )
+        report_artifact_id = db.insert_artifact_object(
+            conn,
+            {
+                **report_metadata,
+                "account_id": account_id,
+                "request_id": request_id,
+                "role": "vton_report",
+                "legacy_path": str(output_path.with_suffix(output_path.suffix + ".json")),
+                "content_type": "application/json",
+                "status": "active",
+            },
+        )
+        report_ref = artifact_uri(report_artifact_id)
+        report["report_artifact"] = {
+            "path": report_ref,
+            "url": artifact_url(report_ref),
+            "storage": {
+                "backend": "minio",
+                "bucket": report_metadata["bucket"],
+                "object_key": report_metadata["object_key"],
+                "artifact_id": report_artifact_id,
+            },
+        }
+    finally:
+        conn.close()
+    if not _truthy_env("TRYOPS_KEEP_LOCAL_RUNTIME_ARTIFACTS"):
+        output_path.unlink(missing_ok=True)
+        output_path.with_suffix(output_path.suffix + ".json").unlink(missing_ok=True)
+
+
+def _cleanup_runtime_paths(paths: list[Path]) -> None:
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
 def _record(
     endpoint: str,
     request_id: str,
@@ -1682,7 +2136,12 @@ def _record(
             conn.close()
 
 
-def _store_vton_upload(payload: dict[str, Any], *, account_id: str = "acct_demo") -> dict[str, Any]:
+def _store_vton_upload(
+    payload: dict[str, Any],
+    *,
+    account_id: str = "acct_demo",
+    request_id: str = "unknown",
+) -> dict[str, Any]:
     data_url = payload.get("data_url")
     if not isinstance(data_url, str) or not data_url.strip():
         raise ValueError("data_url is required")
@@ -1705,7 +2164,10 @@ def _store_vton_upload(payload: dict[str, Any], *, account_id: str = "acct_demo"
         role = "asset"
     filename = Path(str(payload.get("filename", "upload.png"))).name[:180] or "upload.png"
     upload_id = uuid4().hex
+    storage = storage_from_env()
     upload_dir = Path("artifacts/runtime/vton/uploads") / account_id
+    if storage is not None:
+        upload_dir = Path("artifacts/cache/runtime-artifacts/uploads") / account_id
     upload_dir.mkdir(parents=True, exist_ok=True)
     raw_path = upload_dir / f".{role}-{upload_id}.raw.png"
     output_path = upload_dir / f"{role}-{upload_id}.png"
@@ -1719,6 +2181,53 @@ def _store_vton_upload(payload: dict[str, Any], *, account_id: str = "acct_demo"
         raise ValueError(f"uploaded image is not supported: {exc}") from exc
     finally:
         raw_path.unlink(missing_ok=True)
+
+    if storage is not None:
+        try:
+            object_key = account_object_key(account_id, "uploads", role, f"{upload_id}.png")
+            metadata = storage.put_file(object_key=object_key, path=output_path, content_type="image/png")
+            from tryops import db
+
+            conn = db.connect()
+            try:
+                artifact_id = db.insert_artifact_object(
+                    conn,
+                    {
+                        **metadata,
+                        "account_id": account_id,
+                        "request_id": request_id,
+                        "role": f"vton_{role}_upload",
+                        "content_type": "image/png",
+                        "width": image.width,
+                        "height": image.height,
+                        "status": "active",
+                        "metadata": {"filename": filename, "source_size_bytes": len(uploaded_bytes)},
+                    },
+                )
+            finally:
+                conn.close()
+            output_path.unlink(missing_ok=True)
+            output = artifact_uri(artifact_id)
+            return {
+                "path": output,
+                "url": artifact_url(output),
+                "role": role,
+                "filename": filename,
+                "content_type": "image/png",
+                "source_size_bytes": len(uploaded_bytes),
+                "size_bytes": int(metadata["size_bytes"]),
+                "width": image.width,
+                "height": image.height,
+                "storage": {
+                    "backend": "minio",
+                    "bucket": metadata["bucket"],
+                    "object_key": metadata["object_key"],
+                    "artifact_id": artifact_id,
+                },
+            }
+        except Exception:
+            output_path.unlink(missing_ok=True)
+            raise
 
     output = str(output_path)
     return {
@@ -1736,6 +2245,8 @@ def _store_vton_upload(payload: dict[str, Any], *, account_id: str = "acct_demo"
 
 def _run_vton_adapter(*, adapter: str, clean: dict[str, Any]) -> dict[str, Any]:
     if adapter == "naive-overlay-vton":
+        if not _deterministic_baseline_allowed():
+            raise ValueError("deterministic VTON baseline disabled; configure FASHN VTON serving")
         return run_naive_overlay_baseline(
             person_image_path=clean["person_image_path"],
             garment_image_path=clean["garment_image_path"],
@@ -1749,6 +2260,8 @@ def _run_vton_adapter(*, adapter: str, clean: dict[str, Any]) -> dict[str, Any]:
             output_image_path=clean["output_image_path"],
             cache_dir=clean.get("cache_dir", "artifacts/cache/vton_preflight"),
             timeout_ms=clean["timeout_ms"],
+            request_id=clean.get("request_id"),
+            job_id=clean.get("job_id"),
             category=clean["category"],
             garment_photo_type=clean["garment_photo_type"],
             num_timesteps=clean["num_timesteps"],

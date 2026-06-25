@@ -119,10 +119,23 @@ def lookup_semantic_cache(
             "lookup": _empty_lookup(threshold=threshold, entry_count=len(normalized_entries)),
             "error": completed.stderr.strip() or completed.stdout.strip(),
         }
+    if not _truthy_env("TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE"):
+        return _attach_public_metadata(
+            {
+                "schema_version": NATIVE_SEMANTIC_CACHE_SCHEMA,
+                "available": False,
+                "cli_path": str(cli),
+                "returncode": None,
+                "lookup": _empty_lookup(threshold=threshold, entry_count=len(normalized_entries)),
+                "error": "native semantic cache CLI unavailable; lexical diagnostic cache disabled",
+            },
+            query=query,
+        )
     result = _python_lookup(query=query, entries=normalized_entries, threshold=threshold)
     result["available"] = False
     result["cli_path"] = str(cli)
     result["returncode"] = None
+    result["diagnostic_lexical"] = True
     return _attach_public_metadata(result, query=query)
 
 
@@ -191,6 +204,10 @@ def semantic_cache_snapshot() -> dict[str, Any]:
     return GLOBAL_SEMANTIC_CACHE.snapshot()
 
 
+def _truthy_env(name: str) -> bool:
+    return str(os.environ.get(name, "")).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def prompt_fingerprint(prompt: str) -> str:
     normalized = " ".join(str(prompt).lower().split())
     return sha256(normalized.encode("utf-8")).hexdigest()[:16]
@@ -249,7 +266,7 @@ def _python_lookup(*, query: str, entries: list[SemanticCacheEntry], threshold: 
             "threshold": float(threshold),
             "entry_count": len(entries),
             "query_token_count": len(_tokenize(query)),
-            "source": "python_deterministic_fallback",
+            "source": "python_diagnostic_lexical",
         },
         "candidates": [
             {

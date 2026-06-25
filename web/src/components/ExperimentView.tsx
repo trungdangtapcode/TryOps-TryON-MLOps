@@ -107,7 +107,7 @@ export function ExperimentView({ client, experiments, onRefresh }: ExperimentVie
             <h2>{activeDecision?.experiment?.source ?? "unavailable"}</h2>
           </div>
           <span className={`status-pill ${activeDecision?.experiment?.available ? "green" : "amber"}`}>
-            {activeDecision?.experiment?.available ? "native" : "fallback"}
+            {activeDecision?.experiment?.available ? "native" : "native unavailable"}
           </span>
         </div>
         <div className="table-wrap">

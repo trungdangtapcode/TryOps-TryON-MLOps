@@ -127,11 +127,11 @@ def sanitize_payload_metadata(*, workload: str, payload: dict[str, Any]) -> dict
         return {
             "prompt_chars": len(prompt) if isinstance(prompt, str) else 0,
             "max_tokens": payload.get("max_tokens", 256),
-            "model_alias": payload.get("model_alias", "baseline"),
+            "model_alias": payload.get("model_alias", "champion"),
             "routing_mode": payload.get("routing_mode", "direct"),
             "shadow": bool(payload.get("shadow", False)),
             "fallback_enabled": bool(payload.get("fallback_enabled", False)),
-            "semantic_cache_enabled": bool(payload.get("semantic_cache_enabled", True)),
+            "semantic_cache_enabled": bool(payload.get("semantic_cache_enabled", False)),
             "user_hash": user_hash(str(payload.get("user_id", "anonymous"))),
             "quota_plan": payload.get("quota_plan", "free"),
         }
@@ -244,6 +244,40 @@ def emit_structured_log(event: dict[str, Any], *, response: dict[str, Any] | Non
         "trace_flags": event.get("trace", {}).get("trace_flags"),
     }
     record["native_envelope"] = build_native_trace_log_envelope(event, structured_log=record)
+    _STRUCTURED_LOGS.append(record)
+    if _LOG_PATH is not None:
+        _append_jsonl(_LOG_PATH, record)
+    return record
+
+
+def emit_job_structured_log(snapshot: dict[str, Any]) -> dict[str, Any]:
+    status = str(snapshot.get("status") or "unknown")
+    error = snapshot.get("error") if isinstance(snapshot.get("error"), dict) else {}
+    record = {
+        "schema_version": "tryops.structured_log.v1",
+        "timestamp": datetime.now(UTC).isoformat(),
+        "observed_timestamp": datetime.now(UTC).isoformat(),
+        "severity_text": _severity_text(status),
+        "severity_number": _severity_number(status),
+        "event_name": "tryops.job.status",
+        "body": "Async job status changed",
+        "resource": {
+            "service.name": "tryops-api",
+            "service.version": "0.1.0",
+        },
+        "attributes": {
+            "job_id": snapshot.get("job_id"),
+            "request_id": snapshot.get("request_id"),
+            "workload": snapshot.get("workload"),
+            "status": status,
+            "account_id": snapshot.get("account_id"),
+            "created_at": snapshot.get("created_at"),
+            "queued_at": snapshot.get("queued_at"),
+            "started_at": snapshot.get("started_at"),
+            "completed_at": snapshot.get("completed_at"),
+            "error_code": error.get("code"),
+        },
+    }
     _STRUCTURED_LOGS.append(record)
     if _LOG_PATH is not None:
         _append_jsonl(_LOG_PATH, record)

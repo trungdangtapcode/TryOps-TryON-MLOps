@@ -183,6 +183,8 @@ services:
   grafana:
     image: grafana/grafana-oss:latest
     restart: unless-stopped
+    environment:
+      GF_USERS_DEFAULT_THEME: ${TRYOPS_GRAFANA_THEME:-dark}
     ports:
       - "${TRYOPS_GRAFANA_PORT:-3000}:3000"
     volumes:
@@ -247,11 +249,29 @@ services:
       MLFLOW_TRACKING_URI: http://mlflow:5000
       TRYOPS_GUARDRAIL_URL: http://guardrail:18083/v1/guardrails/evaluate
       TRYOPS_REAL_VTON_URL: ${TRYOPS_REAL_VTON_URL:-http://host.docker.internal:18101}
+      TRYOPS_REQUIRE_REAL_MODELS: ${TRYOPS_REQUIRE_REAL_MODELS:-1}
+      TRYOPS_ALLOW_DETERMINISTIC_BASELINE: ${TRYOPS_ALLOW_DETERMINISTIC_BASELINE:-0}
+      TRYOPS_ALLOW_LLM_SEMANTIC_CACHE: ${TRYOPS_ALLOW_LLM_SEMANTIC_CACHE:-0}
+      TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE: ${TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE:-0}
+      TRYOPS_ENABLE_LOCAL_API_KEYS: ${TRYOPS_ENABLE_LOCAL_API_KEYS:-0}
+      TRYOPS_ENABLE_DEV_API_KEY_FALLBACK: ${TRYOPS_ENABLE_DEV_API_KEY_FALLBACK:-0}
+      TRYOPS_LLM_PROVIDER: ${TRYOPS_LLM_PROVIDER:-openai_compatible}
+      TRYOPS_LLM_BASE_URL: ${TRYOPS_LLM_BASE_URL:-http://host.docker.internal:8000/v1}
+      TRYOPS_LLM_MODEL: ${TRYOPS_LLM_MODEL:-HuggingFaceTB/SmolLM2-135M-Instruct}
+      TRYOPS_LLM_API_KEY: ${TRYOPS_LLM_API_KEY:-}
+      TRYOPS_LLM_TIMEOUT_SECONDS: ${TRYOPS_LLM_TIMEOUT_SECONDS:-120}
+      TRYOPS_LLM_TEMPERATURE: ${TRYOPS_LLM_TEMPERATURE:-0}
       TRYOPS_QUOTA_GATEWAY_URL: http://gateway:8081
       TRYOPS_KEYCLOAK_PUBLIC_URL: http://127.0.0.1:${TRYOPS_KEYCLOAK_PORT:-18082}
       TRYOPS_KEYCLOAK_REALM: tryops
       TRYOPS_KEYCLOAK_CLIENT_ID: tryops-web
+      TRYOPS_APP_POSTGRES_DSN: ${TRYOPS_APP_POSTGRES_DSN:-}
       TRYOPS_APP_POSTGRES_DSN_FILE: /run/secrets/tryops_gateway_quota_postgres_dsn
+      TRYOPS_MINIO_ENDPOINT: minio:9000
+      TRYOPS_MINIO_SECURE: "0"
+      TRYOPS_ARTIFACT_BUCKET: ${TRYOPS_ARTIFACT_BUCKET:-tryops-artifacts}
+      TRYOPS_MINIO_RUNTIME_ACCESS_KEY_FILE: /run/secrets/tryops_minio_root_user
+      TRYOPS_MINIO_RUNTIME_SECRET_KEY_FILE: /run/secrets/tryops_minio_root_password
       TRYOPS_STRUCTURED_LOG_PATH: /app/artifacts/logs/api_events.jsonl
       TRYOPS_TRACE_SPAN_PATH: /app/artifacts/traces/api_spans.jsonl
       TRYOPS_VTON_JOB_WORKERS: ${TRYOPS_VTON_JOB_WORKERS:-1}
@@ -274,6 +294,8 @@ services:
       - ./reports/generated:/app/reports/generated:ro
     secrets:
       - tryops_gateway_quota_postgres_dsn
+      - tryops_minio_root_user
+      - tryops_minio_root_password
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=2).read()"]
       interval: 10s
@@ -283,6 +305,7 @@ services:
       - mlflow
       - guardrail
       - keycloak
+      - minio
 
   gateway:
     build:

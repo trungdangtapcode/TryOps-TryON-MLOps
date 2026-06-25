@@ -147,6 +147,7 @@ export function VtonStudio({
     }
     const jobId = pollingJobId;
     let cancelled = false;
+    let recoverableFailures = 0;
     async function pollJob() {
       for (let attempt = 0; attempt < 180 && !cancelled; attempt += 1) {
         try {
@@ -154,6 +155,7 @@ export function VtonStudio({
           if (cancelled) {
             return;
           }
+          recoverableFailures = 0;
           setTrackedJob(snapshot);
           if (snapshot.status === "completed" || snapshot.status === "failed") {
             setPollingJobId(undefined);
@@ -176,8 +178,17 @@ export function VtonStudio({
             return;
           }
           if (isRecoverablePollingError(error)) {
+            recoverableFailures += 1;
+            if (recoverableFailures > MAX_RECOVERABLE_POLL_ERRORS) {
+              setRunError(pollingErrorMessage(error));
+              setBusy(false);
+              setPollingJobId(undefined);
+              void onMutate();
+              return;
+            }
             setRunError(undefined);
             setBusy(true);
+            await Promise.resolve(onMutate());
             await delay(2000);
             continue;
           }
@@ -251,7 +262,7 @@ export function VtonStudio({
 
     setUploadError(undefined);
     if (!client.hasCredentials()) {
-      setUploadError("Sign in or enter a local demo API key before uploading.");
+      setUploadError("Sign in before uploading.");
       return;
     }
     if (!isSupportedImageFile(file)) {
@@ -405,7 +416,7 @@ export function VtonStudio({
               </div>
             </div>
 
-          <details className="fashion-advanced">
+          <details className="fashion-advanced fashion-studio-settings">
             <summary>
               <Settings2 aria-hidden="true" size={17} />
               Studio settings
@@ -554,6 +565,8 @@ const qualitySettings: Record<VtonQuality, { numTimesteps: number; guidanceScale
   best: { numTimesteps: 50, guidanceScale: 1.5 }
 };
 
+const MAX_RECOVERABLE_POLL_ERRORS = 3;
+
 function cacheBustedUrl(url: string | undefined, cacheKey: string | undefined): string | undefined {
   if (!url || !cacheKey) {
     return url;
@@ -617,7 +630,13 @@ function isRecoverablePollingError(error: unknown): boolean {
   if (!(error instanceof Error)) {
     return false;
   }
-  return /authenticated account|required scope|Unauthorized|auth_preflight_failed|invalid_jwt|expired_jwt|session expired/i.test(error.message);
+  return /Unauthorized|auth_preflight_failed|invalid_jwt|expired_jwt|session expired/i.test(error.message);
+}
+
+function pollingErrorMessage(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : "Could not poll running job";
 }
 
 function vtonOutputPath(result: VtonResponse | undefined, fallbackPath: string): string | undefined {
@@ -695,7 +714,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 
 function uploadErrorMessage(code?: string, message?: string): string {
   if (code === "unauthorized_admin_action") {
-    return "Sign in again or enter a local demo API key.";
+    return "Sign in again.";
   }
   return message ?? "Image upload was rejected";
 }

@@ -124,6 +124,25 @@ CREATE TABLE IF NOT EXISTS jobs (
     payload     TEXT,
     result_path TEXT
 );
+CREATE TABLE IF NOT EXISTS artifact_objects (
+    id           TEXT PRIMARY KEY,
+    account_id   TEXT,
+    request_id   TEXT,
+    role         TEXT NOT NULL,
+    backend      TEXT NOT NULL,
+    bucket       TEXT,
+    object_key   TEXT,
+    legacy_path  TEXT,
+    content_type TEXT,
+    size_bytes   INTEGER,
+    sha256       TEXT,
+    width        INTEGER,
+    height       INTEGER,
+    status       TEXT NOT NULL DEFAULT 'active',
+    metadata     TEXT,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS models (
     id          TEXT PRIMARY KEY,
     account_id  TEXT,
@@ -166,6 +185,8 @@ CREATE INDEX IF NOT EXISTS idx_account_invitations_email ON account_invitations(
 CREATE INDEX IF NOT EXISTS idx_requests_created ON requests(created_at);
 CREATE INDEX IF NOT EXISTS idx_requests_kind ON requests(kind);
 CREATE INDEX IF NOT EXISTS idx_feedback_request ON feedback(request_id);
+CREATE INDEX IF NOT EXISTS idx_artifact_objects_account ON artifact_objects(account_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_artifact_objects_legacy ON artifact_objects(legacy_path);
 """
 
 
@@ -302,6 +323,11 @@ def _ensure_account_columns(conn: DbConnection) -> None:
         },
         "feedback": {"account_id": "TEXT"},
         "jobs": {"account_id": "TEXT"},
+        "artifact_objects": {
+            "account_id": "TEXT",
+            "request_id": "TEXT",
+            "metadata": "TEXT",
+        },
         "models": {"account_id": "TEXT"},
         "audit_log": {"account_id": "TEXT"},
     }
@@ -317,6 +343,8 @@ def _ensure_account_columns(conn: DbConnection) -> None:
             cur.execute("CREATE INDEX IF NOT EXISTS idx_requests_account ON requests(account_id, created_at)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_feedback_account ON feedback(account_id)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_artifact_objects_account ON artifact_objects(account_id, created_at)")
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_artifact_objects_legacy ON artifact_objects(legacy_path)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_models_account ON models(account_id)")
             cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_log_account ON audit_log(account_id, created_at)")
         conn.commit()
@@ -337,6 +365,8 @@ def _ensure_account_columns(conn: DbConnection) -> None:
     conn.execute("CREATE INDEX IF NOT EXISTS idx_account_invitations_email ON account_invitations(email, status)")  # type: ignore[attr-defined]
     conn.execute("CREATE INDEX IF NOT EXISTS idx_feedback_account ON feedback(account_id)")  # type: ignore[attr-defined]
     conn.execute("CREATE INDEX IF NOT EXISTS idx_jobs_account ON jobs(account_id)")  # type: ignore[attr-defined]
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_artifact_objects_account ON artifact_objects(account_id, created_at)")  # type: ignore[attr-defined]
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_artifact_objects_legacy ON artifact_objects(legacy_path)")  # type: ignore[attr-defined]
     conn.execute("CREATE INDEX IF NOT EXISTS idx_models_account ON models(account_id)")  # type: ignore[attr-defined]
     conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_log_account ON audit_log(account_id, created_at)")  # type: ignore[attr-defined]
     conn.commit()
@@ -656,6 +686,107 @@ def _loads_json_object(value: object) -> dict[str, Any]:
     return loaded if isinstance(loaded, dict) else {}
 
 
+# ---- artifact objects -----------------------------------------------------
+
+def insert_artifact_object(conn: DbConnection, record: dict[str, Any]) -> str:
+    artifact_id = str(record.get("id") or _stable_id("artifact", f"{record.get('object_key')}:{uuid.uuid4()}"))
+    now = _now()
+    metadata = record.get("metadata")
+    _execute(
+        conn,
+        """INSERT INTO artifact_objects (
+             id, account_id, request_id, role, backend, bucket, object_key, legacy_path,
+             content_type, size_bytes, sha256, width, height, status, metadata, created_at, updated_at
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             account_id=excluded.account_id,
+             request_id=excluded.request_id,
+             role=excluded.role,
+             backend=excluded.backend,
+             bucket=excluded.bucket,
+             object_key=excluded.object_key,
+             legacy_path=excluded.legacy_path,
+             content_type=excluded.content_type,
+             size_bytes=excluded.size_bytes,
+             sha256=excluded.sha256,
+             width=excluded.width,
+             height=excluded.height,
+             status=excluded.status,
+             metadata=excluded.metadata,
+             updated_at=excluded.updated_at""",
+        (
+            artifact_id,
+            record.get("account_id") or DEMO_ACCOUNT_ID,
+            record.get("request_id"),
+            str(record.get("role") or "runtime_artifact"),
+            str(record.get("backend") or "local"),
+            record.get("bucket"),
+            record.get("object_key"),
+            record.get("legacy_path"),
+            record.get("content_type"),
+            record.get("size_bytes"),
+            record.get("sha256"),
+            record.get("width"),
+            record.get("height"),
+            str(record.get("status") or "active"),
+            json.dumps(metadata if isinstance(metadata, dict) else {}),
+            record.get("created_at") or now,
+            now,
+        ),
+    )
+    conn.commit()
+    return artifact_id
+
+
+def get_artifact_object(conn: DbConnection, artifact_id: str) -> dict[str, Any] | None:
+    row = _fetchone(conn, "SELECT * FROM artifact_objects WHERE id=?", (artifact_id,))
+    return _artifact_row_to_record(row) if row else None
+
+
+def find_artifact_by_legacy_path(conn: DbConnection, legacy_path: str) -> dict[str, Any] | None:
+    row = _fetchone(
+        conn,
+        "SELECT * FROM artifact_objects WHERE legacy_path=? ORDER BY created_at DESC LIMIT 1",
+        (legacy_path,),
+    )
+    return _artifact_row_to_record(row) if row else None
+
+
+def update_request_output_summary_by_legacy_path(
+    conn: DbConnection,
+    *,
+    legacy_path: str,
+    output_summary: str,
+) -> None:
+    _execute(
+        conn,
+        "UPDATE requests SET output_summary=? WHERE output_summary=?",
+        (output_summary, legacy_path),
+    )
+    conn.commit()
+
+
+def update_job_result_path_by_legacy_path(
+    conn: DbConnection,
+    *,
+    legacy_path: str,
+    result_path: str,
+) -> None:
+    _execute(
+        conn,
+        "UPDATE jobs SET result_path=? WHERE result_path=?",
+        (result_path, legacy_path),
+    )
+    conn.commit()
+
+
+def _artifact_row_to_record(row: Any) -> dict[str, Any]:
+    data = _row_dict(row)
+    data["metadata"] = _loads_json_object(data.get("metadata"))
+    return data
+
+
 # ---- accounts -------------------------------------------------------------
 
 def bootstrap_account(conn: DbConnection, principal: dict[str, Any]) -> dict[str, Any]:
@@ -669,9 +800,19 @@ def bootstrap_account(conn: DbConnection, principal: dict[str, Any]) -> dict[str
     _accept_pending_invitations(conn, profile, now=now)
     accounts = list_accounts_for_subject(conn, subject)
     if accounts:
-        _execute(conn, "UPDATE account_members SET last_seen_at=? WHERE subject=?", (now, subject))
+        _execute(
+            conn,
+            "UPDATE account_members SET email=?, display_name=?, last_seen_at=? WHERE subject=?",
+            (profile.get("email"), profile.get("display_name"), now, subject),
+        )
+        for context in accounts:
+            account = context.get("account", {})
+            account_id = str(account.get("id") or "")
+            repaired_name = _repair_text_encoding(str(account.get("name") or ""))
+            if account_id and repaired_name and repaired_name != account.get("name"):
+                _execute(conn, "UPDATE accounts SET name=? WHERE id=?", (repaired_name, account_id))
         conn.commit()
-        return accounts[0]
+        return list_accounts_for_subject(conn, subject)[0]
 
     return create_account(
         conn,
@@ -688,8 +829,8 @@ def upsert_user_profile(conn: DbConnection, principal: dict[str, Any], *, now: s
         raise ValueError("authenticated principal subject is required")
     timestamp = now or _now()
     email = _email(principal.get("email")) or None
-    username = str(principal.get("username") or "").strip() or (email.split("@", 1)[0] if email else None)
-    display_name = str(principal.get("display_name") or username or email or "TryOps User").strip()
+    username = _repair_text_encoding(str(principal.get("username") or "").strip()) or (email.split("@", 1)[0] if email else None)
+    display_name = _repair_text_encoding(str(principal.get("display_name") or username or email or "TryOps User").strip())
     avatar_url = str(principal.get("avatar_url") or "").strip() or _avatar_url(email, display_name)
     _execute(
         conn,
@@ -795,6 +936,27 @@ def create_account(
     if created is None:
         raise RuntimeError("account bootstrap failed")
     return created
+
+
+def _repair_text_encoding(value: str) -> str:
+    text = value.strip()
+    if not text:
+        return text
+    if not any(marker in text for marker in ("Ã", "Â", "áº", "á»", "àº", "à»")):
+        return text
+    for encoding in ("latin1", "cp1252"):
+        try:
+            candidate = text.encode(encoding).decode("utf-8")
+        except UnicodeError:
+            continue
+        if candidate and _mojibake_score(candidate) < _mojibake_score(text):
+            return candidate
+    return text
+
+
+def _mojibake_score(value: str) -> int:
+    markers = ("Ã", "Â", "áº", "á»", "àº", "à»", "\ufffd")
+    return sum(value.count(marker) for marker in markers)
 
 
 def _account_context_from_row(row: Any) -> dict[str, Any]:

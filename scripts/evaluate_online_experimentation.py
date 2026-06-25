@@ -18,7 +18,7 @@ from tryops.routing import build_experiment_routing_decision  # noqa: E402
 VARIANTS = [
     {
         "name": "champion",
-        "adapter": "tryops-rule-baseline",
+        "adapter": "openai-compatible-vllm",
         "allocation_percent": 45.0,
         "impressions": 1000.0,
         "rewards": 820.0,
@@ -28,7 +28,7 @@ VARIANTS = [
     },
     {
         "name": "challenger",
-        "adapter": "tryops-rule-baseline",
+        "adapter": "openai-compatible-vllm",
         "allocation_percent": 45.0,
         "impressions": 500.0,
         "rewards": 465.0,
@@ -38,7 +38,7 @@ VARIANTS = [
     },
     {
         "name": "candidate",
-        "adapter": "tryops-rule-baseline",
+        "adapter": "openai-compatible-vllm",
         "allocation_percent": 10.0,
         "impressions": 50.0,
         "rewards": 49.0,

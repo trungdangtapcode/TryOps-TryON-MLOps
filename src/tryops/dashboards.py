@@ -9,9 +9,9 @@ REQUIRED_DASHBOARDS = {
     "tryops-service-overview": {
         "title": "TryOps Service Overview",
         "required_panels": [
-            "API Request Rate",
+            "Persisted API Requests",
             "API Error Ratio",
-            "Average API Latency",
+            "Observed Workload Latency",
             "Async VTON Queue Depth",
             "Gateway Request Rate",
             "Gateway p95 Latency",
@@ -21,9 +21,9 @@ REQUIRED_DASHBOARDS = {
     "tryops-model-quality": {
         "title": "TryOps Model Quality",
         "required_panels": [
-            "LLM Quality Score",
-            "VTON Garment Similarity",
-            "LLM Latency p95",
+            "LLM Completed Requests",
+            "VTON Completed Requests",
+            "LLM Observed Latency",
             "VTON Latency",
         ],
     },
@@ -32,9 +32,9 @@ REQUIRED_DASHBOARDS = {
         "required_panels": [
             "Estimated Daily Request Cost",
             "Quota Utilization",
-            "Energy per 1k Tokens",
-            "CO2e per 1k Tokens",
-            "Cost vs Energy Correlation",
+            "Observed Energy Total",
+            "Estimated CO2e From Energy",
+            "Cost vs Observed Energy",
             "Cost and Capacity Evidence Map",
         ],
     },
@@ -44,6 +44,18 @@ REQUIRED_DASHBOARDS = {
             "Blocked Requests by OWASP Risk",
             "Guardrail Actions by Risk",
             "Guardrail Evidence Map",
+        ],
+    },
+    "tryops-observability-drilldown": {
+        "title": "TryOps Observability Drilldown",
+        "required_panels": [
+            "Scrape Target Health",
+            "OTel Collector Throughput",
+            "Loki and Tempo Health",
+            "FASHN VTON Service Logs",
+            "Async Job Lifecycle Logs",
+            "Error Logs",
+            "Trace and Log Drilldown",
         ],
     },
 }

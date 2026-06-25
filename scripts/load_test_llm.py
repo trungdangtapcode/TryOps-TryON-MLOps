@@ -22,7 +22,7 @@ def main() -> int:
     )
     parser.add_argument("--concurrency", type=int, default=4)
     parser.add_argument("--requests", type=int, default=12)
-    parser.add_argument("--model-alias", default="baseline")
+    parser.add_argument("--model-alias", default="champion")
     parser.add_argument("--output", type=Path, default=Path("artifacts/eval/llm_load/load_test.json"))
     args = parser.parse_args()
 

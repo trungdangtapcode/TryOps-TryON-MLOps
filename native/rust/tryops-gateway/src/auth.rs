@@ -272,8 +272,10 @@ pub(crate) fn required_scope(method: &Method, proxy_path: &str) -> Option<&'stat
         ("GET", "/v1/accounts") | ("GET", "/v1/profiles/search") => Some("account:read"),
         ("GET", "/v1/account/dashboard")
         | ("GET", "/v1/account/quota")
+        | ("GET", "/v1/account/jobs")
         | ("GET", "/v1/account/members") => Some("account:read"),
         (_, path) if path.starts_with("/v1/accounts/") => Some("account:read"),
+        ("GET", path) if path.starts_with("/v1/vton/jobs/") => Some("account:read"),
         ("POST", "/v1/llm/generate")
         | ("POST", "/v1/vton/infer")
         | ("POST", "/v1/vton/upload")
@@ -843,6 +845,14 @@ mod tests {
         assert_eq!(
             required_scope(&Method::GET, "/v1/auth/session"),
             Some("session:read")
+        );
+        assert_eq!(
+            required_scope(&Method::GET, "/v1/account/jobs"),
+            Some("account:read")
+        );
+        assert_eq!(
+            required_scope(&Method::GET, "/v1/vton/jobs/job-123"),
+            Some("account:read")
         );
         assert_eq!(
             required_scope(&Method::POST, "/v1/promotion/evaluate"),

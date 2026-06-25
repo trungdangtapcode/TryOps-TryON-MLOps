@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import UTC, datetime
 from hashlib import sha256
 from pathlib import Path
@@ -48,12 +49,23 @@ def authenticate_api_key(
     *,
     required_scope: str,
     registry: dict[str, Any] | None = None,
+    allow_local_keys: bool | None = None,
 ) -> dict[str, Any]:
     if not isinstance(api_key, str) or not api_key.strip():
         return _auth_decision(
             allowed=False,
             required_scope=required_scope,
             reason="missing_api_key",
+            principal=None,
+        )
+
+    if allow_local_keys is None and registry is None:
+        allow_local_keys = _local_api_keys_enabled()
+    if allow_local_keys is False:
+        return _auth_decision(
+            allowed=False,
+            required_scope=required_scope,
+            reason="local_api_keys_disabled",
             principal=None,
         )
 
@@ -83,6 +95,11 @@ def authenticate_api_key(
         reason="authorized",
         principal=principal,
     )
+
+
+def _local_api_keys_enabled() -> bool:
+    value = str(os.environ.get("TRYOPS_ENABLE_LOCAL_API_KEYS", "")).strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def authorize_admin_payload(payload: dict[str, Any], *, required_scope: str) -> dict[str, Any]:
@@ -310,14 +327,13 @@ def _auth_decision(
 def _nav_order(item: str) -> int:
     order = {
         "dashboard": 0,
-        "demo": 1,
-        "llm": 2,
-        "vton": 3,
-        "history": 4,
-        "runs": 5,
-        "registry": 6,
-        "evaluations": 7,
-        "governance": 8,
-        "incidents": 9,
+        "llm": 1,
+        "vton": 2,
+        "history": 3,
+        "runs": 4,
+        "registry": 5,
+        "evaluations": 6,
+        "governance": 7,
+        "incidents": 8,
     }
     return order.get(item, 100)

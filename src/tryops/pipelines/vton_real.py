@@ -1,6 +1,6 @@
 """Real diffusion-based Virtual Try-On (the VTON real tranche).
 
-Replaces the deterministic overlay stub with a genuine latent-diffusion try-on on
+Runs a genuine latent-diffusion try-on on
 the GPU, behind the *same* ``tryops.vton_baseline.v1`` artifact contract. Method:
 the garment is composited onto the person's torso region (preserving its pixels),
 then Stable-Diffusion inpainting refines that region at partial strength so the
@@ -8,10 +8,8 @@ garment is conditioned on real pixels (not just a text prompt) and blended
 photorealistically. This is an honest, low-VRAM real-diffusion baseline; dedicated
 warping models (CatVTON, IDM-VTON) remain the higher-fidelity stretch.
 
-Discipline (as for R1/R2): every real component keeps a working degraded-mode
-fallback. Without torch/diffusers/CUDA/model the call transparently falls back to
-the deterministic overlay baseline and records the reason, so the contract and
-``make smoke`` never require a GPU.
+This helper fails closed when torch, diffusers, CUDA, or model weights are
+unavailable.
 """
 
 from __future__ import annotations
@@ -24,7 +22,6 @@ from typing import Any
 
 from tryops.energy import measure_energy
 from tryops.pipelines.data_ingestion import sha256_file
-from tryops.pipelines.vton_baseline import run_naive_overlay_baseline
 from tryops.run_context import build_run_context
 
 # Canonical community SD1.5 inpainting repo (ungated; stabilityai/* is gated).
@@ -92,18 +89,11 @@ def run_real_vton(
     guidance_scale: float = 7.5,
     model_id: str = DEFAULT_VTON_MODEL,
 ) -> dict[str, Any]:
-    """Generate a real diffusion try-on, falling back to the deterministic baseline."""
+    """Generate a real diffusion try-on without deterministic fallback."""
 
     output_path = Path(output_image_path)
     if not real_vton_available():
-        report = run_naive_overlay_baseline(
-            person_image_path=person_image_path,
-            garment_image_path=garment_image_path,
-            output_image_path=output_image_path,
-            cache_dir=cache_dir,
-        )
-        report["model"]["fallback_reason"] = "torch/diffusers/CUDA unavailable"
-        return report
+        raise RuntimeError("real VTON requires torch, diffusers, and CUDA")
 
     try:
         run_context = build_run_context(run_name="vton-real-diffusion-inpaint")
@@ -179,12 +169,5 @@ def run_real_vton(
         report_path = output_path.with_suffix(output_path.suffix + ".json")
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True), encoding="utf-8")
         return report
-    except Exception as exc:  # degraded mode: never break the VTON contract
-        report = run_naive_overlay_baseline(
-            person_image_path=person_image_path,
-            garment_image_path=garment_image_path,
-            output_image_path=output_image_path,
-            cache_dir=cache_dir,
-        )
-        report["model"]["fallback_reason"] = f"real VTON failed: {type(exc).__name__}: {exc}"
-        return report
+    except Exception as exc:
+        raise RuntimeError(f"real VTON failed: {type(exc).__name__}: {exc}") from exc

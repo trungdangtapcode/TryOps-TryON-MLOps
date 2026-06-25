@@ -93,7 +93,7 @@ class ApiContractTests(unittest.TestCase):
 
     def test_safe_alias_and_canary_routing(self) -> None:
         route = resolve_model_alias("llm", "champion")
-        self.assertEqual(route["adapter"], "tryops-rule-baseline")
+        self.assertEqual(route["adapter"], "openai-compatible-vllm")
 
         decision = build_routing_decision(
             workload="llm",
@@ -107,7 +107,7 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(decision["primary_alias"], "challenger")
         self.assertEqual(decision["shadow_alias"], "champion")
 
-    def test_llm_fallback_routing_switches_unavailable_optimized_alias_to_baseline(self) -> None:
+    def test_llm_fallback_routing_does_not_switch_to_baseline(self) -> None:
         decision = build_routing_decision(
             workload="llm",
             request_id="request-fallback",
@@ -116,9 +116,9 @@ class ApiContractTests(unittest.TestCase):
             route_health={"baseline": "ready", "challenger": "unavailable"},
         )
 
-        self.assertEqual(decision["primary_alias"], "baseline")
-        self.assertEqual(decision["pre_fallback_alias"], "challenger")
-        self.assertTrue(decision["fallback"]["applied"])
+        self.assertEqual(decision["primary_alias"], "challenger")
+        self.assertFalse(decision["fallback"]["applied"])
+        self.assertIn("real model serving", decision["fallback"]["reason"])
 
 
 if __name__ == "__main__":

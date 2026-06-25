@@ -3,8 +3,8 @@
 
 Sweeps fp16/8bit/4bit variants of one base model, measures real latency, decode
 throughput, peak VRAM, and rubric quality, gates each variant with the native
-C++ SLO engine, and writes a ``tryops.llm_pareto.v1`` artifact. Degrades to the
-deterministic baseline when torch/bitsandbytes/GPU are unavailable.
+C++ SLO engine, and writes a ``tryops.llm_pareto.v1`` artifact. Variants are
+marked unavailable when torch/bitsandbytes/GPU are unavailable.
 """
 from __future__ import annotations
 

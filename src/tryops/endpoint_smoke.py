@@ -127,7 +127,7 @@ def _check_llm_generate(client: Any) -> dict[str, Any]:
         {
             "request_id": "req-endpoint-smoke-llm",
             "prompt": "Explain TryOps monitoring, registry, and rollback in three concise points.",
-            "model_alias": "baseline",
+            "model_alias": "champion",
             "max_tokens": 96,
             "structured": True,
             "quota_plan": "free",

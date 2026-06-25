@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Run real diffusion-based VTON (the VTON real tranche).
-
-Emits the same ``tryops.vton_baseline.v1`` artifact as the deterministic overlay
-baseline so the comparison, metrics, lineage, and gates are unchanged. Falls back
-to the deterministic baseline when torch/diffusers/CUDA/model are unavailable.
-"""
+"""Run real diffusion-based VTON (the VTON real tranche)."""
 from __future__ import annotations
 
 import argparse
@@ -43,8 +38,6 @@ def main() -> int:
     m, metrics = report["model"], report["metrics"]
     print(f"adapter: {report['lineage']['adapter']}")
     print(f"model: {m['name']} ({m['type']})")
-    if m.get("fallback_reason"):
-        print(f"fallback_reason: {m['fallback_reason']}")
     print(f"latency_ms: {metrics.get('latency_ms')}  gpu_memory_gb: {metrics.get('gpu_memory_gb')}")
     print(f"output: {report['output']['path']} ({report['output']['width']}x{report['output']['height']})")
     print(json.dumps({"output_checksum": report["output"]["checksum"]}))

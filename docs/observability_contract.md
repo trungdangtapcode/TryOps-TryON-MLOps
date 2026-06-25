@@ -106,6 +106,28 @@ Set `TRYOPS_STRUCTURED_LOG_PATH` to redirect the JSONL sink in deployed environm
 should ship these records through OpenTelemetry Collector, Fluent Bit, or Grafana Alloy into Loki or
 another log backend.
 
+The FASHN VTON model service also emits structured JSONL records to
+`artifacts/logs/fashn_vton_events.jsonl` by default. These records include sanitized model-service
+lifecycle events such as `tryops.fashn_vton.service_started`,
+`tryops.fashn_vton.request_started`, `tryops.fashn_vton.request_completed`,
+`tryops.fashn_vton.request_rejected`, and `tryops.fashn_vton.request_failed`. They carry
+`attributes.job_id`, `attributes.request_id`, model configuration, latency, model-loaded state, and
+sanitized error fields without raw image paths.
+
+Async job status transitions are emitted into the API structured log as `tryops.job.status` events,
+so a support engineer can correlate a Studio job row to API lifecycle logs and FASHN model-service
+logs with the same `job_id` or `request_id`.
+
+In the local product stack, `make app-up` starts Loki, Tempo, and the OTel bridge by default. Open
+Grafana at `http://127.0.0.1:13000`, then use the **TryOps Observability Drilldown** dashboard:
+
+- **FASHN VTON Service Logs** for model-service start/completion/rejection/failure events.
+- **Async Job Lifecycle Logs** for queued/running/completed/failed job transitions.
+- **Error Logs** for API, job, gateway, and model-service error records.
+
+Set `TRYOPS_OBSERVABILITY=0` before `make app-up` only when you intentionally want a lighter local
+stack without Grafana log and trace drilldowns.
+
 Research basis:
 
 - OpenTelemetry logs data model: https://opentelemetry.io/docs/specs/otel/logs/data-model/

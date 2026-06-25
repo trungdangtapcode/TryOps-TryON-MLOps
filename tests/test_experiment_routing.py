@@ -17,7 +17,7 @@ def _variants() -> list[dict[str, float | str]]:
     return [
         {
             "name": "champion",
-            "adapter": "tryops-rule-baseline",
+            "adapter": "openai-compatible-vllm",
             "allocation_percent": 45.0,
             "impressions": 1000.0,
             "rewards": 820.0,
@@ -27,7 +27,7 @@ def _variants() -> list[dict[str, float | str]]:
         },
         {
             "name": "challenger",
-            "adapter": "tryops-rule-baseline",
+            "adapter": "openai-compatible-vllm",
             "allocation_percent": 45.0,
             "impressions": 500.0,
             "rewards": 465.0,
@@ -37,7 +37,7 @@ def _variants() -> list[dict[str, float | str]]:
         },
         {
             "name": "candidate",
-            "adapter": "tryops-rule-baseline",
+            "adapter": "openai-compatible-vllm",
             "allocation_percent": 10.0,
             "impressions": 50.0,
             "rewards": 49.0,

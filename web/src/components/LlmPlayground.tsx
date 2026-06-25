@@ -13,14 +13,14 @@ interface LlmPlaygroundProps {
 
 export function LlmPlayground({ client, onMutate }: LlmPlaygroundProps) {
   const [prompt, setPrompt] = useState(samplePrompt);
-  const [modelAlias, setModelAlias] = useState("baseline");
+  const [modelAlias, setModelAlias] = useState("champion");
   const [quotaPlan, setQuotaPlan] = useState("free");
   const [routingMode, setRoutingMode] = useState<"direct" | "canary" | "experiment_ab" | "experiment_bandit">("direct");
   const [canaryPercent, setCanaryPercent] = useState(10);
   const [maxTokens, setMaxTokens] = useState(180);
   const [structured, setStructured] = useState(true);
   const [shadow, setShadow] = useState(false);
-  const [semanticCache, setSemanticCache] = useState(true);
+  const [semanticCache, setSemanticCache] = useState(false);
   const [result, setResult] = useState<LlmGenerationResponse | undefined>();
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState("");
@@ -37,8 +37,8 @@ export function LlmPlayground({ client, onMutate }: LlmPlaygroundProps) {
         routing_mode: routingMode,
         canary_percent: canaryPercent,
         shadow,
-        optimized_available: modelAlias !== "baseline",
-        fallback_enabled: true,
+        optimized_available: true,
+        fallback_enabled: false,
         semantic_cache_enabled: semanticCache,
         user_id: "console-user",
         quota_plan: quotaPlan

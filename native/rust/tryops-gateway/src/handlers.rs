@@ -581,20 +581,20 @@ async fn proxy_api(
         )
         .header("x-tryops-edge-rate-key", decision.key_hash);
     if let Some(principal) = auth_principal {
+        request = add_identity_header(request, "x-tryops-auth-key-id", &principal.key_id);
+        request = add_identity_header(request, "x-tryops-auth-subject", &principal.subject);
         request = request
-            .header("x-tryops-auth-key-id", principal.key_id)
-            .header("x-tryops-auth-subject", principal.subject)
             .header("x-tryops-auth-provider", principal.provider)
-            .header("x-tryops-auth-role", principal.role)
+            .header("x-tryops-auth-role", header_ascii_value(&principal.role))
             .header("x-tryops-auth-scopes", principal.scopes.join(" "));
         if let Some(email) = principal.email {
-            request = request.header("x-tryops-auth-email", email);
+            request = add_identity_header(request, "x-tryops-auth-email", &email);
         }
         if let Some(username) = principal.username {
-            request = request.header("x-tryops-auth-username", username);
+            request = add_identity_header(request, "x-tryops-auth-username", &username);
         }
         if let Some(display_name) = principal.display_name {
-            request = request.header("x-tryops-auth-display-name", display_name);
+            request = add_identity_header(request, "x-tryops-auth-display-name", &display_name);
         }
     }
     request = add_edge_cache_headers(request, cache_admission.as_ref());
@@ -791,4 +791,41 @@ fn append_gateway_structured_log(
     line.push(b'\n');
     file.write_all(&line).map_err(|error| error.to_string())?;
     Ok(())
+}
+
+fn add_identity_header(
+    request: reqwest::RequestBuilder,
+    name: &'static str,
+    value: &str,
+) -> reqwest::RequestBuilder {
+    let encoded_name = format!("{name}-utf8");
+    request
+        .header(name, header_ascii_value(value))
+        .header(encoded_name, percent_encode_utf8(value))
+}
+
+fn header_ascii_value(value: &str) -> String {
+    value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii() && !ch.is_control() {
+                ch
+            } else {
+                '?'
+            }
+        })
+        .collect()
+}
+
+fn percent_encode_utf8(value: &str) -> String {
+    let mut encoded = String::with_capacity(value.len());
+    for byte in value.bytes() {
+        if matches!(byte, b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'.' | b'_' | b'~') {
+            encoded.push(byte as char);
+        } else {
+            encoded.push('%');
+            encoded.push_str(&format!("{byte:02X}"));
+        }
+    }
+    encoded
 }

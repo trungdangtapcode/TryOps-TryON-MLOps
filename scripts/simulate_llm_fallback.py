@@ -15,7 +15,7 @@ from tryops.routing import build_routing_decision  # noqa: E402
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Simulate LLM fallback routing from optimized aliases to baseline.")
+    parser = argparse.ArgumentParser(description="Simulate disabled LLM fallback routing for real-model production.")
     parser.add_argument("--request-id", default="req-llm-fallback-demo")
     parser.add_argument("--requested-alias", default="challenger")
     parser.add_argument("--optimized-status", default="unavailable")
@@ -28,7 +28,7 @@ def main() -> int:
         requested_alias=args.requested_alias,
         fallback_enabled=True,
         route_health={
-            "baseline": "ready",
+            "baseline": "disabled",
             args.requested_alias: args.optimized_status,
         },
     )

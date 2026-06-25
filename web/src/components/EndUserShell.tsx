@@ -51,7 +51,7 @@ export function EndUserShell({
     session?.principal.display_name
     || session?.principal.email
     || session?.principal.username
-    || (devApiKeyEnabled && apiKey.trim() ? "Local dev key" : "Guest"),
+    || (devApiKeyEnabled && apiKey.trim() ? "Local API key" : "Guest"),
     session?.principal.email,
     session?.principal.username
   );
@@ -60,6 +60,8 @@ export function EndUserShell({
   const activeAccountId = session?.account?.id ?? selectedAccountId;
   const accountAvatarUrl = session?.account?.avatar_url ?? session?.membership?.avatar_url;
   const identityAvatarUrl = session?.membership?.avatar_url ?? accountAvatarUrl;
+  const localApiKeysEnabled = Boolean(authConfig?.demo_api_key_fallback)
+    || import.meta.env.VITE_TRYOPS_ENABLE_DEV_AUTH_FALLBACK === "1";
 
   return (
     <div className="consumer-app">
@@ -148,27 +150,31 @@ export function EndUserShell({
                   <ExternalLink aria-hidden="true" size={14} />
                 </a>
               ) : null}
-              <label className="dev-toggle">
-                <input
-                  checked={devApiKeyEnabled}
-                  onChange={(event) => onDevApiKeyEnabledChange(event.target.checked)}
-                  type="checkbox"
-                />
-                <span>Enable local dev API key fallback</span>
-              </label>
-              <label className="api-key-field">
-                <span>Local dev API key</span>
-                <input
-                  autoComplete="off"
-                  disabled={!devApiKeyEnabled}
-                  onChange={(event) => onApiKeyChange(event.target.value)}
-                  placeholder="tryops-viewer-demo-key"
-                  type="password"
-                  value={apiKey}
-                />
-              </label>
+              {localApiKeysEnabled ? (
+                <>
+                  <label className="dev-toggle">
+                    <input
+                      checked={devApiKeyEnabled}
+                      onChange={(event) => onDevApiKeyEnabledChange(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>Enable local API key</span>
+                  </label>
+                  <label className="api-key-field">
+                    <span>Local API key</span>
+                    <input
+                      autoComplete="off"
+                      disabled={!devApiKeyEnabled}
+                      onChange={(event) => onApiKeyChange(event.target.value)}
+                      placeholder="local API key"
+                      type="password"
+                      value={apiKey}
+                    />
+                  </label>
+                </>
+              ) : null}
               <p className="settings-note">
-                Normal users sign in with username/password through Keycloak. This key is only for local debugging.
+                Normal users sign in with username/password through Keycloak.
               </p>
               <button className="text-button full-width" onClick={onRefresh} type="button">
                 <RefreshCw aria-hidden="true" size={16} />

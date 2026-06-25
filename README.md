@@ -98,6 +98,14 @@ MLflow tables such as `runs` are only populated by MLflow experiment runs. Produ
 
 ### Real VTON Model
 
+```bash
+ HF_HOME="$PWD/artifacts/hf-home" \
+  HF_HUB_CACHE="$PWD/artifacts/hf-home/hub" \
+  HF_XET_CACHE="$PWD/artifacts/hf-home/xet" \
+  XDG_CACHE_HOME="$PWD/artifacts/cache/xdg" \
+  artifacts/venvs/fashn-vton/bin/hf auth login
+```
+
 The production VTON target uses the open-source FASHN VTON v1.5 model. `make app-up` prepares the model runtime if needed, starts the FASHN service in the background on port `18101`, then starts the Docker app. Docker reaches the model through `host.docker.internal`.
 
 The local FASHN loader is patched at startup to avoid the worst host-RAM spike: it builds the large model on PyTorch `meta`, loads safetensors directly to CUDA, and assigns those GPU tensors into the module before inference. This is enabled by default with `FASHN_VTON_GPU_FIRST_LOAD=1`; set `FASHN_VTON_GPU_FIRST_LOAD=0 make app-up` only if you need to debug the original vendor loading path.
@@ -378,11 +386,18 @@ Hot reload UI:    http://127.0.0.1:18173
 FastAPI direct:    http://127.0.0.1:18080
 FASHN VTON model:  http://127.0.0.1:18101
 Grafana:           http://127.0.0.1:13000
+Loki logs API:     http://127.0.0.1:13100
+Tempo traces API:  http://127.0.0.1:13200
+OTel bridge:       http://127.0.0.1:19122/metrics
 Prometheus:        http://127.0.0.1:19090
 MLflow:            http://127.0.0.1:15000
 MinIO API:         http://127.0.0.1:19000
 MinIO Console:     http://127.0.0.1:19001
 ```
+
+Grafana includes the **TryOps Observability Drilldown** dashboard. Use it to inspect FASHN VTON
+model-service logs, async job lifecycle logs, and error logs by `job_id`, `request_id`, or
+`trace_id`.
 
 If port `18101` conflicts, start the model service on another port and point the app at it:
 

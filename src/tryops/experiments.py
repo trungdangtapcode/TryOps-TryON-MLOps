@@ -6,6 +6,7 @@ from typing import Any
 from tryops.pipelines.llm_baseline import SUPPORTED_MODEL_ALIASES
 
 
+LLM_PRODUCTION_ADAPTER = "openai-compatible-vllm"
 DEFAULT_EXPERIMENT_ID = "tryops-llm-answer-quality"
 DEFAULT_EXPERIMENT_HOLDBACK_PERCENT = 5.0
 DEFAULT_EXPERIMENT_THRESHOLDS = {
@@ -16,7 +17,7 @@ DEFAULT_EXPERIMENT_THRESHOLDS = {
 DEFAULT_EXPERIMENT_VARIANTS = [
     {
         "name": "champion",
-        "adapter": "tryops-rule-baseline",
+        "adapter": LLM_PRODUCTION_ADAPTER,
         "allocation_percent": 45.0,
         "impressions": 1000.0,
         "rewards": 820.0,
@@ -26,7 +27,7 @@ DEFAULT_EXPERIMENT_VARIANTS = [
     },
     {
         "name": "challenger",
-        "adapter": "tryops-rule-baseline",
+        "adapter": LLM_PRODUCTION_ADAPTER,
         "allocation_percent": 45.0,
         "impressions": 500.0,
         "rewards": 465.0,
@@ -36,7 +37,7 @@ DEFAULT_EXPERIMENT_VARIANTS = [
     },
     {
         "name": "candidate",
-        "adapter": "tryops-rule-baseline",
+        "adapter": LLM_PRODUCTION_ADAPTER,
         "allocation_percent": 10.0,
         "impressions": 50.0,
         "rewards": 49.0,
@@ -48,7 +49,7 @@ DEFAULT_EXPERIMENT_VARIANTS = [
 DEFAULT_EXPERIMENT_ANALYSIS_VARIANTS = [
     {
         "name": "champion",
-        "adapter": "tryops-rule-baseline",
+        "adapter": LLM_PRODUCTION_ADAPTER,
         "allocation_percent": 45.0,
         "impressions": 950.0,
         "rewards": 786.0,
@@ -58,7 +59,7 @@ DEFAULT_EXPERIMENT_ANALYSIS_VARIANTS = [
     },
     {
         "name": "challenger",
-        "adapter": "tryops-rule-baseline",
+        "adapter": LLM_PRODUCTION_ADAPTER,
         "allocation_percent": 45.0,
         "impressions": 800.0,
         "rewards": 760.0,
@@ -119,7 +120,7 @@ def _normalize_variant(value: object) -> dict[str, Any]:
         raise ValueError(f"unsupported experiment variant '{name}'")
     return {
         "name": name,
-        "adapter": str(value.get("adapter", "tryops-rule-baseline")),
+        "adapter": str(value.get("adapter", LLM_PRODUCTION_ADAPTER)),
         "allocation_percent": _float_field(value, "allocation_percent"),
         "impressions": _float_field(value, "impressions"),
         "rewards": _float_field(value, "rewards"),

@@ -60,6 +60,20 @@ File: `infra/grafana/dashboards/tryops-cost-capacity.json`
 - Cost vs energy correlation.
 - Cost and capacity evidence map.
 
+### TryOps Observability Drilldown
+
+File: `infra/grafana/dashboards/tryops-observability-drilldown.json`
+
+The production operations view uses the same visual structure as a dense infrastructure dashboard:
+
+- A first-row KPI strip with colored stat tiles for platform health, API error ratio, active VTON jobs, FASHN model-service errors, telemetry export failures, and log/trace storage health.
+- A health row with scrape-target status, Loki/Tempo readiness, and Valkey runtime behavior.
+- A telemetry row for OTel collector throughput and TryOps OTel bridge export flow.
+- A runtime row for API memory, job queue pressure, quota keys, and gateway request/error flow.
+- A log row for FASHN VTON service logs, async job lifecycle logs, and all structured error logs.
+
+This dashboard is meant for debugging live production behavior. Raw backend logs stay in Grafana/Loki; the product UI should surface sanitized job status, request IDs, job IDs, and user-safe error summaries.
+
 ## Future Dashboard Views
 
 ### Executive Demo

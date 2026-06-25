@@ -76,13 +76,22 @@ def readiness_state() -> dict[str, Any]:
         "status": "ready",
         "components": {
             "api": {"status": "ready"},
-            "vton_baseline": {"status": "ready", "adapter": "naive-overlay-vton"},
+            "vton_baseline": {
+                "status": "diagnostics_only",
+                "adapter": "naive-overlay-vton",
+                "reason": "not used by default production VTON traffic",
+            },
             "vton_fashn": {
                 "status": "configured" if "TRYOPS_REAL_VTON_URL" in os.environ else "external_service_required",
                 "adapter": "fashn-vton-http",
                 "reason": "start the host GPU service with `make fashn-vton-service` for champion VTON",
             },
-            "llm_baseline": {"status": "ready", "adapter": "tryops-rule-baseline"},
+            "llm_real": {
+                "status": "configured" if "TRYOPS_LLM_BASE_URL" in os.environ else "external_service_required",
+                "adapter": "openai-compatible-vllm",
+                "model": os.environ.get("TRYOPS_LLM_MODEL", "HuggingFaceTB/SmolLM2-135M-Instruct"),
+                "reason": "start vLLM or set TRYOPS_LLM_BASE_URL for production LLM generation",
+            },
             "registry": {"status": "degraded", "reason": "local file-backed registry only"},
             "rust_gateway": {
                 "status": "ready",
@@ -152,7 +161,7 @@ def validate_llm_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[
     if not isinstance(optimized_available, bool):
         errors.append({"field": "optimized_available", "message": "optimized_available must be a boolean"})
 
-    semantic_cache_enabled = payload.get("semantic_cache_enabled", True)
+    semantic_cache_enabled = payload.get("semantic_cache_enabled", False)
     if not isinstance(semantic_cache_enabled, bool):
         errors.append({"field": "semantic_cache_enabled", "message": "semantic_cache_enabled must be a boolean"})
 
@@ -206,7 +215,7 @@ def validate_llm_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[
             "shadow": shadow if isinstance(shadow, bool) else False,
             "fallback_enabled": fallback_enabled if isinstance(fallback_enabled, bool) else False,
             "optimized_available": optimized_available if isinstance(optimized_available, bool) else False,
-            "semantic_cache_enabled": semantic_cache_enabled if isinstance(semantic_cache_enabled, bool) else True,
+            "semantic_cache_enabled": semantic_cache_enabled if isinstance(semantic_cache_enabled, bool) else False,
             "semantic_cache_threshold": semantic_cache_threshold_float,
             "user_id": user_id,
             "quota_plan": quota_plan,
@@ -222,7 +231,7 @@ def validate_llm_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[
 
 def validate_vton_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, str]]]:
     errors: list[dict[str, str]] = []
-    model_alias = str(payload.get("model_alias", "baseline"))
+    model_alias = str(payload.get("model_alias", "champion"))
     if model_alias not in SUPPORTED_VTON_ALIASES:
         errors.append({"field": "model_alias", "message": f"unsupported alias '{model_alias}'"})
 
@@ -238,7 +247,9 @@ def validate_vton_payload(payload: dict[str, Any]) -> tuple[dict[str, Any], list
 
     for field, value in [("person_image_path", person_path), ("garment_image_path", garment_path)]:
         if value is not None:
-            _validate_local_image_path(field, Path(str(value)), errors)
+            text_value = str(value)
+            if not text_value.startswith("artifact:"):
+                _validate_local_image_path(field, Path(text_value), errors)
 
     routing_mode = str(payload.get("routing_mode", "direct"))
     if routing_mode not in {"direct", "canary"}:

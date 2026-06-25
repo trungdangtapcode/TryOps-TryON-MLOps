@@ -10,11 +10,20 @@ SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 
-from tryops.api import generate_baseline_response, run_naive_overlay_baseline
+from tryops.api import _host_visible_runtime_path, run_naive_overlay_baseline
+from tryops.pipelines.llm_baseline import generate_baseline_response
 from tryops.simple_image import solid_rgb, write_png_rgb
 
 
 class ApiHelperTests(unittest.TestCase):
+    def test_host_visible_runtime_path_strips_container_workdir(self) -> None:
+        path = Path.cwd() / "artifacts/runtime/vton/materialized/acct/req/person.png"
+
+        self.assertEqual(
+            _host_visible_runtime_path(path),
+            "artifacts/runtime/vton/materialized/acct/req/person.png",
+        )
+
     def test_api_import_exposes_vton_baseline_adapter(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

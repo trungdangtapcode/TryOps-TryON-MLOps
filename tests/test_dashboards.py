@@ -17,10 +17,11 @@ class DashboardTests(unittest.TestCase):
         report = validate_dashboard_directory(ROOT / "infra/grafana/dashboards")
 
         self.assertTrue(report["passed"])
-        self.assertEqual(report["dashboard_count"], 4)
+        self.assertEqual(report["dashboard_count"], 5)
         self.assertEqual(report["missing_dashboards"], [])
         datasource_sets = [set(check["datasource_uids"]) for check in report["checks"]]
         self.assertTrue(any("prometheus" in datasource_uids for datasource_uids in datasource_sets))
+        self.assertTrue(any("loki" in datasource_uids for datasource_uids in datasource_sets))
 
     def test_grafana_provider_points_to_mounted_dashboard_directory(self) -> None:
         provider = (ROOT / "infra/grafana/provisioning/dashboards/tryops.yml").read_text(encoding="utf-8")
@@ -38,12 +39,27 @@ class DashboardTests(unittest.TestCase):
     def test_cost_dashboard_has_energy_and_cost_correlation_panels(self) -> None:
         dashboard = (ROOT / "infra/grafana/dashboards/tryops-cost-capacity.json").read_text(encoding="utf-8")
 
-        self.assertIn("Energy per 1k Tokens", dashboard)
-        self.assertIn("CO2e per 1k Tokens", dashboard)
-        self.assertIn("Cost vs Energy Correlation", dashboard)
-        self.assertIn("tryops_energy_wh_per_1k_tokens", dashboard)
-        self.assertIn("tryops_co2e_g_per_1k_tokens", dashboard)
+        self.assertIn("Observed Energy Total", dashboard)
+        self.assertIn("Estimated CO2e From Energy", dashboard)
+        self.assertIn("Cost vs Observed Energy", dashboard)
+        self.assertIn("tryops_energy_wh_total", dashboard)
         self.assertIn("tryops_request_cost_usd_per_1k_tokens", dashboard)
+
+    def test_observability_dashboard_has_loki_log_panels(self) -> None:
+        dashboard = (ROOT / "infra/grafana/dashboards/tryops-observability-drilldown.json").read_text(
+            encoding="utf-8"
+        )
+        datasource = (ROOT / "infra/grafana/provisioning/datasources/observability.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("uid: loki", datasource)
+        self.assertIn("uid: tempo", datasource)
+        self.assertIn("FASHN VTON Service Logs", dashboard)
+        self.assertIn("Async Job Lifecycle Logs", dashboard)
+        self.assertIn("Error Logs", dashboard)
+        self.assertIn("tryops.fashn_vton", dashboard)
+        self.assertIn("tryops.job.status", dashboard)
 
     def test_native_guardrail_sidecar_is_wired_to_api_and_prometheus(self) -> None:
         compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")

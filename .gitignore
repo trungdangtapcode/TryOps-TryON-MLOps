@@ -24,3 +24,9 @@ target/
 **/target/
 *.log
 test/
+
+
+# parsed image
+image.png
+image-*.png
+Data_preprocessing.zip

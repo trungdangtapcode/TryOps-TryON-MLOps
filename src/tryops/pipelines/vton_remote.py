@@ -22,6 +22,8 @@ def run_remote_fashn_vton(
     output_image_path: str | Path,
     cache_dir: str | Path,
     timeout_ms: int,
+    request_id: str | None = None,
+    job_id: str | None = None,
     category: str = "tops",
     garment_photo_type: str = "model",
     num_timesteps: int = 50,
@@ -49,6 +51,10 @@ def run_remote_fashn_vton(
         "seed": seed,
         "segmentation_free": segmentation_free,
     }
+    if request_id:
+        payload["request_id"] = request_id
+    if job_id:
+        payload["job_id"] = job_id
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(
         f"{base_url}/v1/vton/infer",

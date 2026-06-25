@@ -6,6 +6,7 @@ use axum::{
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const ARTIFACT_FILE_PROXY_PATH: &str = "/v1/artifacts/file";
+const ARTIFACT_REF_PREFIX: &str = "artifact:";
 const ALLOWED_ARTIFACT_PREFIXES: [&str; 5] = [
     "artifacts/eval/",
     "artifacts/demo/",
@@ -57,6 +58,17 @@ pub(crate) fn artifact_path_preflight_error(
         _ => return Some("artifact path query parameter is required".to_string()),
     };
     let path = percent_decode_component(&raw_path);
+    if let Some(artifact_id) = path.strip_prefix(ARTIFACT_REF_PREFIX) {
+        if artifact_id.is_empty()
+            || artifact_id.len() > 128
+            || !artifact_id
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || byte == b'_' || byte == b'-')
+        {
+            return Some("invalid artifact reference".to_string());
+        }
+        return None;
+    }
     if path.starts_with('/') || path.starts_with('\\') {
         return Some("absolute artifact paths are not allowed".to_string());
     }
@@ -253,6 +265,18 @@ mod tests {
             ),
             None
         );
+        assert_eq!(
+            artifact_path_preflight_error(
+                "/v1/artifacts/file",
+                Some("path=artifact%3Aartifact_abc123")
+            ),
+            None
+        );
+        assert!(artifact_path_preflight_error(
+            "/v1/artifacts/file",
+            Some("path=artifact%3A..%2Fconfigs%2Fapi_keys")
+        )
+        .is_some());
         assert!(artifact_path_preflight_error(
             "/v1/artifacts/file",
             Some("path=..%2F..%2Fconfigs%2Fapi_keys.json")

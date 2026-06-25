@@ -239,9 +239,9 @@ def render_release_notes(*, manifest: dict[str, Any], rollback_plan: dict[str, A
 
 def _adapter_for_workload(workload: str) -> str:
     if workload == "vton":
-        return "naive-overlay-vton"
+        return "fashn-vton-http"
     if workload == "llm":
-        return "tryops-rule-baseline"
+        return "openai-compatible-vllm"
     return "manual-adapter-selection-required"
 
 

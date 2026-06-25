@@ -116,7 +116,7 @@ export function DashboardView({ dashboard, quota, models, requests, onRefresh }:
           <MetricTile
             label="Showback"
             value={formatUsd(quotaSummary?.showback_usd)}
-            detail={quotaSummary?.native_source ? "native ledger" : "runtime fallback"}
+            detail={quotaSummary?.native_source ? "native ledger" : "native ledger unavailable"}
             tone={quotaSummary?.native_source ? "green" : "amber"}
           />
           <MetricTile label="Models" value={models.length} detail="registry rows" />

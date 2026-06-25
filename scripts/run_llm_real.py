@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
-"""Run the real Transformers-backed LLM benchmark (R1 tranche).
-
-Emits the same ``tryops.llm_benchmark.v1`` artifact as the deterministic
-baseline so dashboards, scoring, and gates are unchanged. Falls back to the
-deterministic baseline per-record if torch/transformers/GPU/model are missing.
-"""
+"""Run the real Transformers-backed LLM benchmark (R1 tranche)."""
 from __future__ import annotations
 
 import argparse
@@ -24,7 +19,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Benchmark the real TryOps LLM via Transformers.")
     parser.add_argument("--prompt-set", type=Path, default=Path("samples/eval/golden_prompts.json"))
     parser.add_argument("--output", type=Path, default=Path("artifacts/eval/llm_real/benchmark.json"))
-    parser.add_argument("--model-alias", default="baseline")
+    parser.add_argument("--model-alias", default="champion")
     parser.add_argument("--max-tokens", type=int, default=128)
     args = parser.parse_args()
 

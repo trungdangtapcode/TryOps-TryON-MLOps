@@ -6,9 +6,11 @@ import json
 import os
 import sys
 import threading
+from datetime import UTC, datetime
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 
@@ -22,6 +24,49 @@ from run_fashn_vton_single import DEFAULT_WEIGHTS_DIR, FashnVtonRunner  # noqa: 
 
 class ResourceNotReadyError(RuntimeError):
     pass
+
+
+class StructuredEventLogger:
+    def __init__(self, path: str | Path | None) -> None:
+        self.path = Path(path) if path else None
+        self.lock = threading.Lock()
+
+    def emit(
+        self,
+        *,
+        event_name: str,
+        body: str,
+        attributes: dict[str, Any] | None = None,
+        severity_text: str = "INFO",
+        trace_id: str | None = None,
+        span_id: str | None = None,
+    ) -> None:
+        if self.path is None:
+            return
+        observed_at = datetime.now(UTC).isoformat()
+        record = {
+            "schema_version": "tryops.structured_log.v1",
+            "timestamp": observed_at,
+            "observed_timestamp": observed_at,
+            "severity_text": severity_text,
+            "severity_number": 17 if severity_text == "ERROR" else 9,
+            "event_name": event_name,
+            "body": body,
+            "resource": {
+                "service.name": "tryops-fashn-vton",
+                "service.version": "0.1.0",
+            },
+            "attributes": attributes or {},
+            "trace_id": trace_id,
+            "span_id": span_id,
+        }
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            with self.lock:
+                with self.path.open("a", encoding="utf-8") as output_file:
+                    output_file.write(json.dumps(record, sort_keys=True) + "\n")
+        except OSError as exc:
+            sys.stderr.write(f"fashn-vton-service: structured log write failed: {exc}\n")
 
 
 class FashnVtonService:
@@ -79,7 +124,7 @@ class FashnVtonService:
             )
 
 
-def make_handler(service: FashnVtonService) -> type[BaseHTTPRequestHandler]:
+def make_handler(service: FashnVtonService, structured_logger: StructuredEventLogger) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         server_version = "TryOpsFashnVton/1.0"
 
@@ -93,10 +138,64 @@ def make_handler(service: FashnVtonService) -> type[BaseHTTPRequestHandler]:
             if self.path.rstrip("/") not in {"/v1/vton/infer", "/vton/infer"}:
                 self._json(HTTPStatus.NOT_FOUND, {"status": "not_found", "path": self.path})
                 return
+            started = perf_counter()
+            attributes: dict[str, Any] = {
+                "http.method": "POST",
+                "http.route": "/v1/vton/infer",
+                "status": "started",
+                "model": "fashn-ai/fashn-vton-1.5",
+            }
+            trace_id: str | None = None
+            span_id: str | None = None
             try:
                 payload = self._read_json()
-                self._json(HTTPStatus.OK, service.infer(payload))
+                attributes.update(_request_attributes(payload, service))
+                trace_id, span_id = _trace_ids_from_payload(payload)
+                structured_logger.emit(
+                    event_name="tryops.fashn_vton.request_started",
+                    body="FASHN VTON inference started",
+                    attributes=attributes.copy(),
+                    trace_id=trace_id,
+                    span_id=span_id,
+                )
+                response = service.infer(payload)
+                completed_attributes = attributes.copy()
+                completed_attributes.update(
+                    {
+                        "status": "completed",
+                        "latency_ms": round((perf_counter() - started) * 1000.0, 3),
+                        "model_loaded": service.runner._pipeline is not None,
+                        "metrics": _safe_report_metrics(response.get("report")),
+                    }
+                )
+                structured_logger.emit(
+                    event_name="tryops.fashn_vton.request_completed",
+                    body="FASHN VTON inference completed",
+                    attributes=completed_attributes,
+                    trace_id=trace_id,
+                    span_id=span_id,
+                )
+                self._json(HTTPStatus.OK, response)
             except ResourceNotReadyError as exc:
+                failed_attributes = attributes.copy()
+                failed_attributes.update(
+                    {
+                        "status": "rejected",
+                        "latency_ms": round((perf_counter() - started) * 1000.0, 3),
+                        "error_type": type(exc).__name__,
+                        "error_code": "insufficient_host_memory",
+                        "error_message": _sanitize_message(str(exc)),
+                        "model_loaded": service.runner._pipeline is not None,
+                    }
+                )
+                structured_logger.emit(
+                    event_name="tryops.fashn_vton.request_rejected",
+                    severity_text="ERROR",
+                    body="FASHN VTON inference rejected",
+                    attributes=failed_attributes,
+                    trace_id=trace_id,
+                    span_id=span_id,
+                )
                 self._json(
                     HTTPStatus.SERVICE_UNAVAILABLE,
                     {
@@ -107,6 +206,25 @@ def make_handler(service: FashnVtonService) -> type[BaseHTTPRequestHandler]:
                     },
                 )
             except Exception as exc:
+                failed_attributes = attributes.copy()
+                failed_attributes.update(
+                    {
+                        "status": "failed",
+                        "latency_ms": round((perf_counter() - started) * 1000.0, 3),
+                        "error_type": type(exc).__name__,
+                        "error_code": type(exc).__name__,
+                        "error_message": _sanitize_message(str(exc)),
+                        "model_loaded": service.runner._pipeline is not None,
+                    }
+                )
+                structured_logger.emit(
+                    event_name="tryops.fashn_vton.request_failed",
+                    severity_text="ERROR",
+                    body="FASHN VTON inference failed",
+                    attributes=failed_attributes,
+                    trace_id=trace_id,
+                    span_id=span_id,
+                )
                 self._json(
                     HTTPStatus.BAD_REQUEST,
                     {
@@ -148,6 +266,74 @@ def _required_str(payload: dict[str, Any], field: str) -> str:
     return value
 
 
+def _request_attributes(payload: dict[str, Any], service: FashnVtonService) -> dict[str, Any]:
+    return {
+        "request_id": _optional_str(payload.get("request_id")),
+        "job_id": _optional_str(payload.get("job_id")),
+        "category": _optional_str(payload.get("category")) or "tops",
+        "garment_photo_type": _optional_str(payload.get("garment_photo_type")) or "model",
+        "num_timesteps": _optional_int(payload.get("num_timesteps", payload.get("num_inference_steps", 50))),
+        "guidance_scale": _optional_float(payload.get("guidance_scale", 1.5)),
+        "seed": _optional_int(payload.get("seed", 555)),
+        "segmentation_free": bool(payload.get("segmentation_free", True)),
+        "has_person_image_path": bool(_optional_str(payload.get("person_image_path"))),
+        "has_garment_image_path": bool(_optional_str(payload.get("garment_image_path"))),
+        "has_output_image_path": bool(_optional_str(payload.get("output_image_path"))),
+        "weights_dir": str(service.runner.weights_dir),
+        "model_loaded": service.runner._pipeline is not None,
+        "available_memory_mb": _mem_available_mb(),
+        "min_available_memory_mb": service.min_available_mb,
+    }
+
+
+def _trace_ids_from_payload(payload: dict[str, Any]) -> tuple[str | None, str | None]:
+    traceparent = _optional_str(payload.get("traceparent"))
+    if not traceparent:
+        return None, None
+    parts = traceparent.split("-")
+    if len(parts) >= 4 and len(parts[1]) == 32 and len(parts[2]) == 16:
+        return parts[1], parts[2]
+    return None, None
+
+
+def _safe_report_metrics(report: Any) -> dict[str, Any]:
+    if not isinstance(report, dict):
+        return {}
+    metrics = report.get("metrics")
+    if not isinstance(metrics, dict):
+        return {}
+    safe: dict[str, Any] = {}
+    for key, value in metrics.items():
+        if isinstance(value, (int, float, bool)) or value is None:
+            safe[str(key)] = value
+    return safe
+
+
+def _optional_str(value: Any) -> str | None:
+    if not isinstance(value, str):
+        return None
+    value = value.strip()
+    return value or None
+
+
+def _optional_int(value: Any) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _optional_float(value: Any) -> float | None:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sanitize_message(message: str) -> str:
+    return message.replace(str(ROOT), "$TRYOPS_ROOT")
+
+
 def _mem_available_mb() -> int:
     try:
         with open("/proc/meminfo", "r", encoding="utf-8") as handle:
@@ -168,13 +354,29 @@ def main() -> int:
     parser.add_argument("--preload", action="store_true", help="Load model before accepting requests.")
     args = parser.parse_args()
 
+    structured_logger = StructuredEventLogger(
+        os.environ.get("TRYOPS_FASHN_STRUCTURED_LOG_PATH", "artifacts/logs/fashn_vton_events.jsonl")
+    )
     service = FashnVtonService(weights_dir=args.weights_dir, device=args.device)
     if args.preload:
         service.runner.load()
 
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(service))
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(service, structured_logger))
     print(f"FASHN VTON service listening on http://{args.host}:{args.port}", flush=True)
     print(f"weights: {args.weights_dir}", flush=True)
+    structured_logger.emit(
+        event_name="tryops.fashn_vton.service_started",
+        body="FASHN VTON service started",
+        attributes={
+            "host": args.host,
+            "port": args.port,
+            "weights_dir": str(args.weights_dir),
+            "device": args.device,
+            "preload": bool(args.preload),
+            "gpu_first_load": os.environ.get("FASHN_VTON_GPU_FIRST_LOAD", "1"),
+            "min_available_memory_mb": service.min_available_mb,
+        },
+    )
     try:
         server.serve_forever()
     except KeyboardInterrupt:

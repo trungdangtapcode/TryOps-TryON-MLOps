@@ -482,10 +482,10 @@ export class TryOpsClient {
     return parseResponse<T>(response);
   }
 
-  private async artifact<T>(path: string, fallbackApiKey: string): Promise<T> {
+  private async artifact<T>(path: string, defaultApiKey: string): Promise<T> {
     const url = new URL(`${API_BASE}/api/artifacts/file`, window.location.origin);
     url.searchParams.set("path", path);
-    url.searchParams.set("api_key", this.apiKey.trim() || fallbackApiKey);
+    url.searchParams.set("api_key", this.apiKey.trim() || defaultApiKey);
     if (this.accountId.trim()) {
       url.searchParams.set("account_id", this.accountId.trim());
     }

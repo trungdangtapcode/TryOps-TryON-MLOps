@@ -3,7 +3,9 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -48,6 +50,16 @@ class AuthTests(unittest.TestCase):
         self.assertFalse(denied["allowed"])
         self.assertEqual(denied["reason"], "missing_scope")
         self.assertNotIn("tryops-risk-demo-key", str(allowed))
+
+    def test_runtime_api_key_registry_is_disabled_without_opt_in(self) -> None:
+        with patch.dict(os.environ, {"TRYOPS_ENABLE_LOCAL_API_KEYS": "0"}, clear=False):
+            denied = authenticate_api_key("tryops-admin-demo-key", required_scope="admin:read")
+        with patch.dict(os.environ, {"TRYOPS_ENABLE_LOCAL_API_KEYS": "1"}, clear=False):
+            allowed = authenticate_api_key("tryops-admin-demo-key", required_scope="admin:read")
+
+        self.assertFalse(denied["allowed"])
+        self.assertEqual(denied["reason"], "local_api_keys_disabled")
+        self.assertTrue(allowed["allowed"])
 
     def test_rbac_session_exposes_role_nav_permissions(self) -> None:
         registry = load_api_key_registry(ROOT / "configs/api_keys.json")

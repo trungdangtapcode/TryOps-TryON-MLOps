@@ -28,7 +28,7 @@ def route_with_native_experiment_router(
     holdback_percent: float = 0.0,
     guardrail_thresholds: Mapping[str, float] | None = None,
     holdback_alias: str = "champion",
-    holdback_adapter: str = "tryops-rule-baseline",
+    holdback_adapter: str = "openai-compatible-vllm",
     cli_path: str | Path | None = None,
 ) -> dict[str, Any]:
     """Route one request through the native experiment engine when available."""

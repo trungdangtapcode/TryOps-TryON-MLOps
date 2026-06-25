@@ -3,7 +3,6 @@ import {
   BarChart3,
   Boxes,
   CircuitBoard,
-  FlaskConical,
   Gauge,
   History,
   Images,
@@ -19,7 +18,6 @@ export const navItems: NavItem[] = [
   { key: "account", label: "My Account", icon: LayoutDashboard, requiredScope: "account:read" },
   { key: "vton", label: "Try-On Studio", icon: Images },
   { key: "llm", label: "AI Playground", icon: Activity },
-  { key: "demo", label: "Professor Demo", icon: FlaskConical },
   { key: "dashboard", label: "Admin Dashboard", icon: Gauge, requiredScope: "admin:read" },
   { key: "history", label: "Request History", icon: History, requiredScope: "admin:read" },
   { key: "runs", label: "Pipeline Runs", icon: Workflow, requiredScope: "admin:read" },
@@ -30,17 +28,18 @@ export const navItems: NavItem[] = [
   { key: "incidents", label: "Incidents", icon: ShieldAlert, requiredScope: "promotion:evaluate" }
 ];
 
-export const llmVariants = ["baseline", "champion", "challenger", "candidate"];
+export const llmVariants = ["champion", "challenger", "candidate"];
 export const quotaPlans = ["free", "team", "enterprise"];
 export const vtonAliases = [
   { value: "champion", label: "FASHN VTON 1.5 GPU" },
-  { value: "baseline", label: "Diagnostic compositor" }
+  { value: "challenger", label: "FASHN VTON challenger" },
+  { value: "candidate", label: "FASHN VTON candidate" }
 ];
 
 export const experimentVariants = [
   {
     name: "champion",
-    adapter: "tryops-rule-baseline",
+    adapter: "openai-compatible-vllm",
     allocation_percent: 45,
     impressions: 1000,
     rewards: 820,
@@ -50,7 +49,7 @@ export const experimentVariants = [
   },
   {
     name: "challenger",
-    adapter: "tryops-rule-baseline",
+    adapter: "openai-compatible-vllm",
     allocation_percent: 45,
     impressions: 500,
     rewards: 465,
@@ -60,7 +59,7 @@ export const experimentVariants = [
   },
   {
     name: "candidate",
-    adapter: "tryops-rule-baseline",
+    adapter: "openai-compatible-vllm",
     allocation_percent: 10,
     impressions: 50,
     rewards: 49,

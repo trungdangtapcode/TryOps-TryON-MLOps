@@ -34,6 +34,7 @@ class RuntimeArtifactStorage:
         if not source.is_file():
             raise RuntimeArtifactError(f"artifact source does not exist: {source}")
         client = self._client()
+        self._ensure_bucket(client)
         client.fput_object(self.bucket, object_key, str(source), content_type=content_type)
         stat = client.stat_object(self.bucket, object_key)
         return {
@@ -49,6 +50,7 @@ class RuntimeArtifactStorage:
         from io import BytesIO
 
         client = self._client()
+        self._ensure_bucket(client)
         client.put_object(
             self.bucket,
             object_key,
@@ -122,6 +124,10 @@ class RuntimeArtifactStorage:
             return {"status": "unavailable", "reason": str(exc)}
         return {"status": "ready", "bucket": self.bucket, "endpoint": self.endpoint}
 
+    def _ensure_bucket(self, client: Any) -> None:
+        if not client.bucket_exists(self.bucket):
+            client.make_bucket(self.bucket)
+
     def _client(self) -> Any:
         if not self.enabled:
             raise RuntimeArtifactError("MinIO runtime artifact storage is not configured")
@@ -151,7 +157,7 @@ def storage_from_env() -> RuntimeArtifactStorage | None:
     if not endpoint or not access_key or not secret_key:
         return None
     parsed = urlparse(endpoint)
-    if parsed.scheme:
+    if parsed.scheme and parsed.netloc:
         return RuntimeArtifactStorage(
             endpoint=parsed.netloc,
             bucket=bucket,

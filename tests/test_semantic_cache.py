@@ -3,7 +3,9 @@ from __future__ import annotations
 import sys
 import tempfile
 import unittest
+import os
 from pathlib import Path
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
@@ -20,6 +22,33 @@ from tryops.semantic_cache import (  # noqa: E402
 
 
 class SemanticCacheTests(unittest.TestCase):
+    def test_missing_native_cache_does_not_use_lexical_match_without_opt_in(self) -> None:
+        generation = generate_baseline_response(
+            prompt="Explain why MLOps is the core of TryOps in five bullet points.",
+            model_alias="baseline",
+            max_tokens=128,
+        )
+        entry = build_semantic_cache_entry(
+            prompt="model=baseline structured=True prompt=Explain why MLOps is the core of TryOps in five bullet points.",
+            generation=generation,
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ,
+            {"TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE": "0"},
+            clear=False,
+        ):
+            lookup = lookup_semantic_cache(
+                query="model=baseline structured=True prompt=Explain TryOps MLOps core in bullet points.",
+                entries=[entry],
+                threshold=0.70,
+                cli_path=Path(temp_dir) / "missing-native-cache",
+            )
+
+        self.assertFalse(lookup["lookup"]["hit"])
+        self.assertFalse(lookup["available"])
+        self.assertIn("lexical diagnostic cache disabled", lookup["error"])
+
     def test_fallback_lookup_hits_similar_prompt_without_raw_prompt_metadata(self) -> None:
         generation = generate_baseline_response(
             prompt="Explain why MLOps is the core of TryOps in five bullet points.",
@@ -31,7 +60,11 @@ class SemanticCacheTests(unittest.TestCase):
             generation=generation,
         )
 
-        with tempfile.TemporaryDirectory() as temp_dir:
+        with tempfile.TemporaryDirectory() as temp_dir, patch.dict(
+            os.environ,
+            {"TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE": "1"},
+            clear=False,
+        ):
             lookup = lookup_semantic_cache(
                 query="model=baseline structured=True prompt=Explain TryOps MLOps core in bullet points.",
                 entries=[entry],
@@ -56,11 +89,12 @@ class SemanticCacheTests(unittest.TestCase):
         )
         entry = cache.put(prompt=prompt, generation=generation)
 
-        lookup = cache.lookup(
-            "model=baseline structured=True prompt=Compare GPTQ AWQ quantization for TryOps.",
-            threshold=0.70,
-            cli_path=Path("/tmp/missing-tryops-cache"),
-        )
+        with patch.dict(os.environ, {"TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE": "1"}, clear=False):
+            lookup = cache.lookup(
+                "model=baseline structured=True prompt=Compare GPTQ AWQ quantization for TryOps.",
+                threshold=0.70,
+                cli_path=Path("/tmp/missing-tryops-cache"),
+            )
         cached = cache.get_generation(str(lookup["lookup"]["matched_entry_id"]))
 
         self.assertTrue(lookup["lookup"]["hit"])

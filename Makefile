@@ -1,5 +1,10 @@
 .PHONY: test validate-sample validate-bad pipeline-sample deploy-package-sample rollback-sample chaos-sample quota-sample native-quota-ledger-smoke auth-sample supply-chain-sample model-supply-chain-sample vulnerability-scan-sample evaluation-index-sample dvc-minio-sample finops-sample orchestration-sample vton-baseline-sample vton-preprocess-sample vton-real-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample vton-clip-similarity-sample vton-compare-sample vton-advanced-eval-sample llm-baseline-sample llm-benchmark-sample llm-real-sample llm-pareto-sample llm-optimization-report-sample llm-sensitivity-sample llm-continuous-batching-sample llm-vllm-probe-sample llm-quantized-preflight-sample eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample guardrail-sample alert-sample slo-burn-rate-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample governance-sample benchmark-sample registry-webhook-sample signed-pr-promotion-sample native-cpp-cli-build native-image-metrics-build native-image-metrics-sample native-perf-stats-build native-perf-stats-sample native-burn-rate-build native-energy-stats-build native-eval-stats-build native-experiment-router-build native-experiment-stats-build native-batch-scheduler-build native-vton-eval-build native-model-scan-build native-model-provenance-build native-openlineage-build native-gitops-build native-semantic-cache-build native-semantic-cache-test native-chaos-build energy-demo-sample energy-sample native-vton-preprocess-build native-vton-preprocess-sample native-policy-sample native-cpp-test native-benchmark-build native-benchmark-test native-fullstack-load-build native-fullstack-load-test native-fullstack-load-sample native-vllm-probe-build native-vllm-probe-test native-quantized-preflight-build native-quantized-preflight-test native-stack-smoke-build native-stack-smoke-test native-job-runner-build native-job-runner-test native-job-runner-sample native-slo-gate-build native-slo-gate-test native-slo-gate-sample native-event-dispatcher-build native-event-dispatcher-test native-event-dispatcher-sample native-data-versioning-build native-data-versioning-test native-demo-acceptance-build native-demo-acceptance-test native-demo-recorder-build native-demo-recorder-test professor-demo-acceptance professor-demo-refresh-acceptance professor-demo-video native-vuln-scan-build native-vuln-scan-test native-config-contract-build native-config-contract-test native-config-contract-sample native-performance-budget-build native-performance-budget-test native-performance-budget-sample native-evaluation-index-build native-evaluation-index-test native-guardrail-build native-guardrail-test native-guardrail-smoke native-edge-cache-smoke native-edge-guardrail-smoke native-go-build native-go-test native-go-smoke native-rust-build native-rust-test native-rust-smoke native-static-smoke gateway-benchmark gateway-benchmark-native native-tooling web-build web-typecheck app-up app-up-hotreload app-dev app-smoke app-down db-init roadmap-status smoke
 
+ifneq (,$(wildcard .env))
+include .env
+endif
+export TRYOPS_REQUIRE_REAL_MODELS TRYOPS_LLM_PROVIDER TRYOPS_LLM_BASE_URL TRYOPS_LLM_MODEL TRYOPS_LLM_API_KEY TRYOPS_LLM_TIMEOUT_SECONDS TRYOPS_LLM_TEMPERATURE TRYOPS_ALLOW_DETERMINISTIC_BASELINE TRYOPS_ALLOW_LLM_SEMANTIC_CACHE TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE TRYOPS_ENABLE_LOCAL_API_KEYS TRYOPS_ENABLE_DEV_API_KEY_FALLBACK TRYOPS_REAL_VTON_URL HF_TOKEN HUGGINGFACE_HUB_TOKEN HF_HOME HF_HUB_CACHE HF_XET_CACHE HF_HUB_DISABLE_XET
+
 PYTHONPATH := src
 CXX ?= g++
 CXXFLAGS ?= -std=c++17 -O2 -Wall -Wextra -pedantic
@@ -13,6 +18,14 @@ GGUF_MODEL_URL ?= https://huggingface.co/bartowski/SmolLM2-135M-Instruct-GGUF/re
 LLAMA_CLI ?= llama-cli
 VLLM_BASE_URL ?= http://127.0.0.1:8000/v1
 VLLM_MODEL ?= HuggingFaceTB/SmolLM2-135M-Instruct
+VLLM_HOST ?= 127.0.0.1
+VLLM_PORT ?= 8000
+VLLM_PID_FILE ?= artifacts/runtime/vllm-service.pid
+VLLM_LOG ?= artifacts/logs/vllm-service.log
+TRYOPS_REQUIRE_REAL_MODELS ?= 1
+TRYOPS_LLM_BASE_URL ?= $(VLLM_BASE_URL)
+TRYOPS_LLM_MODEL ?= $(VLLM_MODEL)
+TRYOPS_LLM_API_KEY ?=
 TRYOPS_VAULT_IMAGE ?= hashicorp/vault:1.19
 TRYOPS_VAULT_PORT ?= 18200
 TRYOPS_VAULT_DEV_TOKEN ?= tryops-dev-root-token
@@ -27,16 +40,36 @@ FASHN_VTON_HOST ?= 0.0.0.0
 FASHN_VTON_PORT ?= 18101
 FASHN_VTON_PID_FILE ?= artifacts/runtime/fashn-vton-service.pid
 FASHN_VTON_LOG ?= artifacts/logs/fashn-vton-service.log
+FASHN_VTON_STRUCTURED_LOG ?= artifacts/logs/fashn_vton_events.jsonl
 FASHN_VTON_GPU_FIRST_LOAD ?= 1
 FASHN_VTON_CUDA_MODULE_LOADING ?= LAZY
 FASHN_VTON_CUDA_ALLOC_CONF ?= expandable_segments:True
+FASHN_VTON_TORCH_INDEX_URL ?= https://download.pytorch.org/whl/cu126
+FASHN_VTON_TORCH_PACKAGE ?= torch==2.12.1+cu126
+FASHN_VTON_TORCHVISION_PACKAGE ?= torchvision==0.27.1+cu126
+FASHN_VTON_ONNXRUNTIME_PACKAGE ?= onnxruntime-gpu==1.20.2
+FASHN_VTON_SITE_PACKAGES ?= $(FASHN_VTON_VENV)/lib/python3.12/site-packages
+FASHN_VTON_LD_LIBRARY_PATH ?= $(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cublas/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cuda_cupti/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cuda_nvrtc/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cuda_runtime/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cudnn/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cufft/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cufile/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/curand/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cusolver/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cusparse/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/cusparselt/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/nccl/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/nvjitlink/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/nvshmem/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/nvidia/nvtx/lib:$(abspath $(FASHN_VTON_SITE_PACKAGES))/onnxruntime/capi
+TRYOPS_HF_HOME ?= $(if $(HF_HOME),$(abspath $(HF_HOME)),$(CURDIR)/artifacts/hf-home)
+TRYOPS_HF_HUB_CACHE ?= $(if $(HF_HUB_CACHE),$(abspath $(HF_HUB_CACHE)),$(TRYOPS_HF_HOME)/hub)
+TRYOPS_HF_XET_CACHE ?= $(if $(HF_XET_CACHE),$(abspath $(HF_XET_CACHE)),$(TRYOPS_HF_HOME)/xet)
+TRYOPS_XDG_CACHE_HOME ?= $(CURDIR)/artifacts/cache/xdg
+TRYOPS_TMPDIR ?= $(CURDIR)/artifacts/cache/tmp
+TRYOPS_HF_HUB_DISABLE_XET ?= $(if $(HF_HUB_DISABLE_XET),$(HF_HUB_DISABLE_XET),1)
+FASHN_HF_ENV = HF_HOME="$(TRYOPS_HF_HOME)" HF_HUB_CACHE="$(TRYOPS_HF_HUB_CACHE)" HF_XET_CACHE="$(TRYOPS_HF_XET_CACHE)" XDG_CACHE_HOME="$(TRYOPS_XDG_CACHE_HOME)" TMPDIR="$(TRYOPS_TMPDIR)" HF_HUB_DISABLE_XET="$(TRYOPS_HF_HUB_DISABLE_XET)"
+TRYOPS_OBSERVABILITY ?= 1
 TRYOPS_HOT_RELOAD ?= 0
 TRYOPS_WEB_DEV_PORT ?= 18173
 TRYOPS_APP_MIN_AVAILABLE_MB ?= 4096
 TRYOPS_FASHN_MIN_AVAILABLE_MB ?= 4096
+TRYOPS_APP_BUILD_BASE_IMAGES ?= python:3.12-slim-bookworm node:24-slim rust:1-slim-bookworm debian:bookworm-slim golang:1.26.4-alpine alpine:3.20 ghcr.io/mlflow/mlflow:v2.14.3
+TRYOPS_APP_BASE_PULL_ATTEMPTS ?= 4
+TRYOPS_APP_BASE_PULL_DELAY_SECONDS ?= 8
 
 .PHONY: native-gguf-preflight-build native-gguf-preflight-test llm-gguf-preflight-sample
+.PHONY: llm-vllm-service-bg llm-vllm-stop
 .PHONY: fashn-vton-venv fashn-vton-optimize-loader fashn-vton-download fashn-vton-service fashn-vton-service-bg fashn-vton-stop fashn-vton-sample
+.PHONY: app-pull-build-bases
 .PHONY: app-prune-build-cache
 .PHONY: native-trace-envelope-cpp-build native-trace-envelope-cpp-test native-trace-envelope-build native-trace-envelope-test native-trace-envelope-sample
 .PHONY: native-container-contract-build native-container-contract-test native-container-contract-sample
@@ -62,18 +95,83 @@ native-go-toolchain:
 	@$(GO_WRAPPER) version >/dev/null 2>&1 || $(GO_WRAPPER) download
 
 prepare-container-artifacts:
-	@set -eu; \
-	uid=$$(id -u); gid=$$(id -g); \
-	mkdir -p artifacts/app artifacts/cache artifacts/logs artifacts/otel artifacts/traces artifacts/runtime artifacts/runtime/vton artifacts/eval/full_stack artifacts/eval/jobs; \
-	if ! chown -R "$$uid:$$gid" artifacts/app artifacts/cache artifacts/logs artifacts/otel artifacts/traces artifacts/runtime artifacts/eval/full_stack artifacts/eval/jobs 2>/dev/null; then \
-		docker run --rm -v "$(CURDIR)/artifacts:/work" alpine:3.20 sh -lc "chown -R $$uid:$$gid /work/app /work/cache /work/logs /work/otel /work/traces /work/runtime /work/eval/full_stack /work/eval/jobs"; \
-	fi
+	@TRYOPS_CONTAINER_UID=$$(id -u) TRYOPS_CONTAINER_GID=$$(id -g) python3 scripts/prepare_container_artifacts.py --root "$(CURDIR)"
+
+app-pull-build-bases:
+	@python3 scripts/pull_container_images.py --attempts "$(TRYOPS_APP_BASE_PULL_ATTEMPTS)" --delay-seconds "$(TRYOPS_APP_BASE_PULL_DELAY_SECONDS)" $(if $(filter 1 true yes,$(TRYOPS_REFRESH_BASE_IMAGES)),--refresh,) $(TRYOPS_APP_BUILD_BASE_IMAGES)
 
 web-typecheck:
 	cd web && npm ci && npm run typecheck
 
 web-build:
 	cd web && npm ci && npm run build
+
+llm-vllm-service-bg:
+	@set -eu; \
+	if [ "$(TRYOPS_REQUIRE_REAL_MODELS)" = "0" ] || [ "$(TRYOPS_REQUIRE_REAL_MODELS)" = "false" ]; then \
+		echo "TRYOPS_REQUIRE_REAL_MODELS disabled; skipping real LLM service check."; \
+		exit 0; \
+	fi; \
+	mkdir -p "$$(dirname "$(VLLM_PID_FILE)")" "$$(dirname "$(VLLM_LOG)")" "$(TRYOPS_HF_HOME)" "$(TRYOPS_HF_HUB_CACHE)" "$(TRYOPS_XDG_CACHE_HOME)" "$(TRYOPS_TMPDIR)"; \
+	if python3 scripts/check_openai_compatible_llm.py --base-url "$(TRYOPS_LLM_BASE_URL)" --timeout-seconds 3 >/dev/null 2>&1 || python3 scripts/check_openai_compatible_llm.py --base-url "$(VLLM_BASE_URL)" --timeout-seconds 3 >/dev/null 2>&1; then \
+		echo "Real LLM endpoint reachable: $(TRYOPS_LLM_BASE_URL) or $(VLLM_BASE_URL)"; \
+		exit 0; \
+	fi; \
+	if [ -f "$(VLLM_PID_FILE)" ]; then \
+		pid=$$(cat "$(VLLM_PID_FILE)" 2>/dev/null || true); \
+		if [ -n "$$pid" ] && kill -0 "$$pid" 2>/dev/null; then \
+			echo "vLLM service is already starting/running: pid=$$pid url=$(VLLM_BASE_URL)"; \
+			exit 0; \
+		fi; \
+		rm -f "$(VLLM_PID_FILE)"; \
+	fi; \
+	if [ "$(TRYOPS_LLM_BASE_URL)" != "$(VLLM_BASE_URL)" ]; then \
+		echo "Configured real LLM endpoint is not reachable at $(TRYOPS_LLM_BASE_URL)."; \
+		echo "Refusing to auto-start local vLLM because TRYOPS_LLM_BASE_URL points at an external endpoint."; \
+		exit 1; \
+	fi; \
+	if ! command -v vllm >/dev/null 2>&1; then \
+		echo "No real LLM endpoint is reachable at $(TRYOPS_LLM_BASE_URL), and the 'vllm' command is not installed."; \
+		echo "Install vLLM or start an OpenAI-compatible server, for example:"; \
+		echo "  vllm serve $(TRYOPS_LLM_MODEL) --host $(VLLM_HOST) --port $(VLLM_PORT)"; \
+		exit 1; \
+	fi; \
+	echo "Starting vLLM real LLM service: model=$(TRYOPS_LLM_MODEL) url=$(VLLM_BASE_URL)"; \
+	$(FASHN_HF_ENV) setsid vllm serve "$(TRYOPS_LLM_MODEL)" --host "$(VLLM_HOST)" --port "$(VLLM_PORT)" > "$(VLLM_LOG)" 2>&1 < /dev/null & \
+	pid=$$!; \
+	echo "$$pid" > "$(VLLM_PID_FILE)"; \
+	for _ in $$(seq 1 120); do \
+		if python3 scripts/check_openai_compatible_llm.py --base-url "$(VLLM_BASE_URL)" --timeout-seconds 3 >/dev/null 2>&1; then \
+			echo "vLLM service started: pid=$$pid url=$(VLLM_BASE_URL)"; \
+			echo "logs: $(VLLM_LOG)"; \
+			exit 0; \
+		fi; \
+		if ! kill -0 "$$pid" 2>/dev/null; then \
+			echo "vLLM service exited during startup. Last logs:"; \
+			tail -80 "$(VLLM_LOG)" 2>/dev/null || true; \
+			rm -f "$(VLLM_PID_FILE)"; \
+			exit 1; \
+		fi; \
+		sleep 2; \
+	done; \
+	echo "vLLM service is starting slowly: pid=$$pid url=$(VLLM_BASE_URL)"; \
+	echo "logs: $(VLLM_LOG)"
+
+llm-vllm-stop:
+	@set -eu; \
+	if [ ! -f "$(VLLM_PID_FILE)" ]; then \
+		echo "vLLM service is not tracked by $(VLLM_PID_FILE)"; \
+		exit 0; \
+	fi; \
+	pid=$$(cat "$(VLLM_PID_FILE)" 2>/dev/null || true); \
+	if [ -z "$$pid" ] || ! kill -0 "$$pid" 2>/dev/null; then \
+		rm -f "$(VLLM_PID_FILE)"; \
+		echo "vLLM service was not running"; \
+		exit 0; \
+	fi; \
+	kill "$$pid"; \
+	rm -f "$(VLLM_PID_FILE)"; \
+	echo "vLLM service stopped: pid=$$pid"
 
 ci: test web-typecheck native-go-test native-rust-test native-cpp-test native-admission-sample native-redaction-sample native-safety-sample native-audit-log-sample native-dedup-sample native-hll-sample native-consistent-hash-sample native-cache-sample native-cost-sample native-sampler-sample native-retry-sample supply-chain-sample vulnerability-scan-sample native-container-contract-sample native-dependency-lock-contract-sample native-secret-rotation-contract-sample native-incident-workflow-sample native-ci-contract-live evaluation-index-sample
 	docker compose config --quiet
@@ -1342,19 +1440,33 @@ app-up:
 		echo "Close memory-heavy apps or run 'make app-down' first. This guard prevents another OOM crash."; \
 		exit 1; \
 	fi; \
+	$(MAKE) llm-vllm-service-bg; \
 	$(MAKE) fashn-vton-service-bg; \
 	$(MAKE) prepare-container-artifacts; \
+	$(MAKE) app-pull-build-bases; \
 	uid=$$(id -u); gid=$$(id -g); \
 	hot_reload="$(TRYOPS_HOT_RELOAD)"; \
+	observability="$(TRYOPS_OBSERVABILITY)"; \
 	compose_files="-f docker-compose.yml"; \
 	compose_profiles="--profile ops"; \
 	services="gateway keycloak controller prometheus grafana minio mlflow guardrail"; \
+	if [ "$$observability" = "1" ] || [ "$$observability" = "true" ]; then \
+		compose_files="$$compose_files -f docker-compose.observability.yml"; \
+		compose_profiles="$$compose_profiles --profile observability"; \
+		echo "TRYOPS_OBSERVABILITY enabled: Grafana will include Loki logs and Tempo traces."; \
+	else \
+		docker compose -f docker-compose.yml -f docker-compose.observability.yml --profile observability rm -sf loki tempo tryops-otel-bridge >/dev/null 2>&1 || true; \
+	fi; \
 	if [ "$$hot_reload" = "1" ] || [ "$$hot_reload" = "true" ]; then \
 		compose_files="$$compose_files -f docker-compose.hot-reload.yml"; \
 		services="gateway keycloak controller web-dev prometheus grafana minio mlflow guardrail"; \
 		echo "TRYOPS_HOT_RELOAD enabled: Vite dev UI will listen on http://127.0.0.1:$${TRYOPS_WEB_DEV_PORT:-$(TRYOPS_WEB_DEV_PORT)}"; \
 	else \
 		docker compose -f docker-compose.yml -f docker-compose.hot-reload.yml rm -sf web-dev >/dev/null 2>&1 || true; \
+	fi; \
+	if [ "$$observability" = "1" ] || [ "$$observability" = "true" ]; then \
+		mkdir -p artifacts/observability/loki artifacts/observability/tempo; \
+		services="$$services loki tempo tryops-otel-bridge"; \
 	fi; \
 	TRYOPS_CONTAINER_UID=$$uid \
 	TRYOPS_CONTAINER_GID=$$gid \
@@ -1371,6 +1483,9 @@ app-up:
 	TRYOPS_PROMETHEUS_PORT=$${TRYOPS_PROMETHEUS_PORT:-19090} \
 	TRYOPS_ALERTMANAGER_PORT=$${TRYOPS_ALERTMANAGER_PORT:-19093} \
 	TRYOPS_GRAFANA_PORT=$${TRYOPS_GRAFANA_PORT:-13000} \
+	TRYOPS_LOKI_PORT=$${TRYOPS_LOKI_PORT:-13100} \
+	TRYOPS_TEMPO_PORT=$${TRYOPS_TEMPO_PORT:-13200} \
+	TRYOPS_OTEL_BRIDGE_PORT=$${TRYOPS_OTEL_BRIDGE_PORT:-19122} \
 	TRYOPS_KEYCLOAK_PORT=$${TRYOPS_KEYCLOAK_PORT:-18082} \
 	TRYOPS_KEYCLOAK_ADMIN=$${TRYOPS_KEYCLOAK_ADMIN:-tryops-admin} \
 	TRYOPS_KEYCLOAK_ADMIN_PASSWORD=$${TRYOPS_KEYCLOAK_ADMIN_PASSWORD:-tryops-local-keycloak} \
@@ -1379,17 +1494,31 @@ app-up:
 	TRYOPS_API_PORT=$${TRYOPS_API_PORT:-18080} \
 	TRYOPS_GATEWAY_PORT=$${TRYOPS_GATEWAY_PORT:-18081} \
 	TRYOPS_WEB_DEV_PORT=$${TRYOPS_WEB_DEV_PORT:-$(TRYOPS_WEB_DEV_PORT)} \
+	TRYOPS_APP_POSTGRES_DSN="$${TRYOPS_APP_POSTGRES_DSN:-host=postgres port=5432 user=tryops password=tryops-local-postgres dbname=tryops}" \
 	TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN="$${TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN:-host=postgres port=5432 user=tryops password=tryops-local-postgres dbname=tryops}" \
 		docker compose $$compose_files $$compose_profiles up --build -d $$services; \
+	gateway_url="http://127.0.0.1:$${TRYOPS_GATEWAY_PORT:-18081}"; \
+	if ! python3 scripts/wait_for_http.py "$$gateway_url/health" --label gateway --timeout-seconds 120; then \
+		docker compose $$compose_files $$compose_profiles ps; \
+		docker compose $$compose_files $$compose_profiles logs --tail 100 gateway api; \
+		exit 1; \
+	fi; \
 	if [ "$$hot_reload" = "1" ] || [ "$$hot_reload" = "true" ]; then \
 		echo "Hot reload UI:        http://127.0.0.1:$${TRYOPS_WEB_DEV_PORT:-$(TRYOPS_WEB_DEV_PORT)}"; \
 		echo "Gateway/API edge:     http://127.0.0.1:$${TRYOPS_GATEWAY_PORT:-18081}"; \
 		echo "Keycloak IAM:         http://127.0.0.1:$${TRYOPS_KEYCLOAK_PORT:-18082}"; \
 		echo "Controller webhooks:  http://127.0.0.1:$${TRYOPS_CONTROLLER_PORT:-18084}"; \
+		echo "Grafana dashboards:   http://127.0.0.1:$${TRYOPS_GRAFANA_PORT:-13000}"; \
 	else \
 		echo "Console + gateway:    http://127.0.0.1:$${TRYOPS_GATEWAY_PORT:-18081}"; \
 		echo "Keycloak IAM:         http://127.0.0.1:$${TRYOPS_KEYCLOAK_PORT:-18082}"; \
 		echo "Controller webhooks:  http://127.0.0.1:$${TRYOPS_CONTROLLER_PORT:-18084}"; \
+		echo "Grafana dashboards:   http://127.0.0.1:$${TRYOPS_GRAFANA_PORT:-13000}"; \
+	fi; \
+	if [ "$$observability" = "1" ] || [ "$$observability" = "true" ]; then \
+		echo "Loki logs API:        http://127.0.0.1:$${TRYOPS_LOKI_PORT:-13100}"; \
+		echo "Tempo traces API:     http://127.0.0.1:$${TRYOPS_TEMPO_PORT:-13200}"; \
+		echo "OTel bridge metrics:  http://127.0.0.1:$${TRYOPS_OTEL_BRIDGE_PORT:-19122}/metrics"; \
 	fi
 
 app-up-hotreload:
@@ -1427,6 +1556,7 @@ app-smoke: native-stack-smoke-build native-job-runner-build evaluation-index-sam
 	TRYOPS_GUARDRAIL_PORT=$${TRYOPS_GUARDRAIL_PORT:-18093} \
 	TRYOPS_API_PORT=$${TRYOPS_API_PORT:-18080} \
 	TRYOPS_GATEWAY_PORT=$${TRYOPS_GATEWAY_PORT:-18081} \
+	TRYOPS_APP_POSTGRES_DSN="$${TRYOPS_APP_POSTGRES_DSN:-host=postgres port=5432 user=tryops password=tryops-local-postgres dbname=tryops}" \
 	TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN="$${TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN:-host=postgres port=5432 user=tryops password=tryops-local-postgres dbname=tryops}" \
 		docker compose up --build -d gateway prometheus grafana minio mlflow guardrail; \
 	TRYOPS_STACK_GATEWAY_URL=http://127.0.0.1:$${TRYOPS_GATEWAY_PORT:-18081} \
@@ -1441,8 +1571,9 @@ app-smoke: native-stack-smoke-build native-job-runner-build evaluation-index-sam
 	artifacts/native/tryops_evaluation_index --root . --output artifacts/eval/evaluation_index/evaluation_index.json
 
 app-down:
+	$(MAKE) llm-vllm-stop
 	$(MAKE) fashn-vton-stop
-	docker compose -f docker-compose.yml -f docker-compose.hot-reload.yml down --remove-orphans
+	docker compose -f docker-compose.yml -f docker-compose.hot-reload.yml -f docker-compose.observability.yml --profile ops --profile observability down --remove-orphans
 
 roadmap-status:
 	PYTHONPATH=$(PYTHONPATH) python scripts/roadmap_status.py MLOPS_VTON_LLM_ENTERPRISE_ROADMAP.md
@@ -1456,27 +1587,30 @@ vton-real-sample: native-vton-preprocess-build native-image-metrics-build
 
 fashn-vton-venv:
 	@set -eu; \
+	mkdir -p "$(TRYOPS_HF_HOME)" "$(TRYOPS_HF_HUB_CACHE)" "$(TRYOPS_HF_XET_CACHE)" "$(TRYOPS_XDG_CACHE_HOME)" "$(TRYOPS_TMPDIR)"; \
 	if [ ! -x "$(FASHN_VTON_PYTHON)" ]; then \
 		python3 -m venv "$(FASHN_VTON_VENV)"; \
 	fi; \
-	"$(FASHN_VTON_PYTHON)" -m pip install --upgrade pip; \
+	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" -m pip install --upgrade pip; \
 	if [ ! -d "$(FASHN_VTON_REPO)" ]; then \
 		git clone https://github.com/fashn-AI/fashn-vton-1.5.git "$(FASHN_VTON_REPO)"; \
 	fi; \
 	$(MAKE) fashn-vton-optimize-loader; \
-	"$(FASHN_VTON_PYTHON)" -m pip install -e "$(FASHN_VTON_REPO)" --no-deps; \
-	"$(FASHN_VTON_PYTHON)" -m pip install torchvision onnxruntime-gpu einops fashn-human-parser matplotlib
+	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" -m pip install --index-url "$(FASHN_VTON_TORCH_INDEX_URL)" "$(FASHN_VTON_TORCH_PACKAGE)" "$(FASHN_VTON_TORCHVISION_PACKAGE)"; \
+	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" -m pip install -e "$(FASHN_VTON_REPO)" --no-deps; \
+	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" -m pip install "$(FASHN_VTON_ONNXRUNTIME_PACKAGE)" einops fashn-human-parser matplotlib
 
 fashn-vton-optimize-loader:
 	python3 scripts/patch_fashn_vton_gpu_loader.py "$(FASHN_VTON_REPO)"
 
 fashn-vton-download: fashn-vton-venv
-	"$(FASHN_VTON_PYTHON)" "$(FASHN_VTON_REPO)/scripts/download_weights.py" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
+	@mkdir -p "$(TRYOPS_HF_HOME)" "$(TRYOPS_HF_HUB_CACHE)" "$(TRYOPS_HF_XET_CACHE)" "$(TRYOPS_XDG_CACHE_HOME)" "$(TRYOPS_TMPDIR)"
+	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" "$(FASHN_VTON_REPO)/scripts/download_weights.py" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
 
 fashn-vton-service: fashn-vton-optimize-loader
 	@test -x "$(FASHN_VTON_PYTHON)" || { echo "missing $(FASHN_VTON_PYTHON); run: make fashn-vton-venv"; exit 1; }
 	@test -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" || { echo "missing FASHN weights; run: make fashn-vton-download"; exit 1; }
-	CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" "$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton.py --host "$(FASHN_VTON_HOST)" --port "$(FASHN_VTON_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
+	$(FASHN_HF_ENV) LD_LIBRARY_PATH="$(FASHN_VTON_LD_LIBRARY_PATH)" CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" TRYOPS_FASHN_STRUCTURED_LOG_PATH="$(FASHN_VTON_STRUCTURED_LOG)" "$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton.py --host "$(FASHN_VTON_HOST)" --port "$(FASHN_VTON_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
 
 fashn-vton-service-bg:
 	@if [ ! -x "$(FASHN_VTON_PYTHON)" ] || [ ! -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" ]; then \
@@ -1485,26 +1619,29 @@ fashn-vton-service-bg:
 	fi
 	@$(MAKE) fashn-vton-optimize-loader
 	@set -eu; \
-	mkdir -p "$$(dirname "$(FASHN_VTON_PID_FILE)")" "$$(dirname "$(FASHN_VTON_LOG)")"; \
+	mkdir -p "$$(dirname "$(FASHN_VTON_PID_FILE)")" "$$(dirname "$(FASHN_VTON_LOG)")" "$$(dirname "$(FASHN_VTON_STRUCTURED_LOG)")"; \
 	if [ -f "$(FASHN_VTON_PID_FILE)" ]; then \
 		pid=$$(cat "$(FASHN_VTON_PID_FILE)" 2>/dev/null || true); \
 		if [ -n "$$pid" ] && kill -0 "$$pid" 2>/dev/null; then \
 			echo "FASHN VTON service already running: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_PORT)"; \
+			echo "structured logs: $(FASHN_VTON_STRUCTURED_LOG)"; \
 			exit 0; \
 		fi; \
 		rm -f "$(FASHN_VTON_PID_FILE)"; \
 	fi; \
 	if curl -fsS --max-time 2 "http://127.0.0.1:$(FASHN_VTON_PORT)/health" >/dev/null 2>&1; then \
 		echo "FASHN VTON service already reachable: http://127.0.0.1:$(FASHN_VTON_PORT)"; \
+		echo "structured logs: $(FASHN_VTON_STRUCTURED_LOG)"; \
 		exit 0; \
 	fi; \
-	CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" TRYOPS_FASHN_MIN_AVAILABLE_MB="$(TRYOPS_FASHN_MIN_AVAILABLE_MB)" setsid "$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton.py --host "$(FASHN_VTON_HOST)" --port "$(FASHN_VTON_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)" > "$(FASHN_VTON_LOG)" 2>&1 < /dev/null & \
+	$(FASHN_HF_ENV) LD_LIBRARY_PATH="$(FASHN_VTON_LD_LIBRARY_PATH)" CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" TRYOPS_FASHN_MIN_AVAILABLE_MB="$(TRYOPS_FASHN_MIN_AVAILABLE_MB)" TRYOPS_FASHN_STRUCTURED_LOG_PATH="$(FASHN_VTON_STRUCTURED_LOG)" setsid "$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton.py --host "$(FASHN_VTON_HOST)" --port "$(FASHN_VTON_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)" > "$(FASHN_VTON_LOG)" 2>&1 < /dev/null & \
 	pid=$$!; \
 	echo "$$pid" > "$(FASHN_VTON_PID_FILE)"; \
 	for _ in 1 2 3 4 5 6 7 8 9 10; do \
 		if curl -fsS --max-time 2 "http://127.0.0.1:$(FASHN_VTON_PORT)/health" >/dev/null 2>&1; then \
 			echo "FASHN VTON service started: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_PORT)"; \
 			echo "logs: $(FASHN_VTON_LOG)"; \
+			echo "structured logs: $(FASHN_VTON_STRUCTURED_LOG)"; \
 			exit 0; \
 		fi; \
 		if ! kill -0 "$$pid" 2>/dev/null; then \
@@ -1516,7 +1653,8 @@ fashn-vton-service-bg:
 		sleep 1; \
 	done; \
 	echo "FASHN VTON service is starting slowly: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_PORT)"; \
-	echo "logs: $(FASHN_VTON_LOG)"
+	echo "logs: $(FASHN_VTON_LOG)"; \
+	echo "structured logs: $(FASHN_VTON_STRUCTURED_LOG)"
 
 fashn-vton-stop:
 	@set -eu; \
@@ -1537,7 +1675,7 @@ fashn-vton-stop:
 fashn-vton-sample: fashn-vton-optimize-loader
 	@test -x "$(FASHN_VTON_PYTHON)" || { echo "missing $(FASHN_VTON_PYTHON); run: make fashn-vton-venv"; exit 1; }
 	@test -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" || { echo "missing FASHN weights; run: make fashn-vton-download"; exit 1; }
-	CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" "$(FASHN_VTON_PYTHON)" scripts/run_fashn_vton_single.py --person test/model1.png --garment test/garment1.png --output test/fashn_vton_model1_garment1.png --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)" --category tops --garment-photo-type model --num-timesteps 50 --guidance-scale 1.5 --seed 555
+	$(FASHN_HF_ENV) LD_LIBRARY_PATH="$(FASHN_VTON_LD_LIBRARY_PATH)" CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" "$(FASHN_VTON_PYTHON)" scripts/run_fashn_vton_single.py --person test/model1.png --garment test/garment1.png --output test/fashn_vton_model1_garment1.png --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)" --category tops --garment-photo-type model --num-timesteps 50 --guidance-scale 1.5 --seed 555
 
 db-init:
 	PYTHONPATH=$(PYTHONPATH) python -c "from tryops import db; db.init_db(); print('tryops.db initialized')"

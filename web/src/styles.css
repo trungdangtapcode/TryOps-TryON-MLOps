@@ -17,6 +17,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.82), rgba(247, 248, 245, 0.96)),
     #f7f8f5;
@@ -304,6 +305,7 @@ button {
 
 .consumer-app {
   min-height: 100vh;
+  overflow-x: clip;
   background:
     radial-gradient(circle at 18% 8%, rgba(143, 77, 62, 0.1), transparent 28%),
     radial-gradient(circle at 82% 18%, rgba(47, 117, 101, 0.11), transparent 26%),
@@ -317,7 +319,7 @@ button {
   top: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: minmax(220px, 0.85fr) auto minmax(280px, 0.85fr);
+  grid-template-columns: minmax(180px, 0.55fr) auto minmax(0, 1fr);
   align-items: center;
   gap: 16px;
   min-height: 82px;
@@ -399,6 +401,7 @@ button {
   align-items: center;
   justify-self: end;
   gap: 10px;
+  max-width: 100%;
   min-width: 0;
 }
 
@@ -455,7 +458,7 @@ button {
   align-items: center;
   gap: 9px;
   min-height: 42px;
-  max-width: min(430px, 42vw);
+  max-width: min(260px, 24vw);
   padding: 0 13px;
   border: 1px solid rgba(24, 25, 22, 0.14);
   background: rgba(255, 255, 255, 0.58);
@@ -468,7 +471,7 @@ button {
 .consumer-identity {
   display: grid;
   min-width: 0;
-  max-width: 320px;
+  max-width: 170px;
   gap: 1px;
   text-align: left;
 }
@@ -532,7 +535,8 @@ button {
   grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   gap: 3px;
-  min-width: min(260px, 24vw);
+  width: min(300px, 28vw);
+  min-width: 170px;
   color: #6b635a;
   font-size: 0.68rem;
   font-weight: 850;
@@ -546,7 +550,8 @@ button {
 .workspace-switcher select {
   grid-column: 1 / -1;
   min-height: 30px;
-  max-width: 260px;
+  width: 100%;
+  max-width: 100%;
   border: 1px solid rgba(24, 25, 22, 0.16);
   background: rgba(255, 255, 255, 0.66);
   color: #181916;
@@ -1534,7 +1539,7 @@ th {
 
 .fashion-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.22fr) minmax(360px, 0.58fr);
+  grid-template-columns: minmax(0, 1.18fr) minmax(320px, 0.58fr);
   gap: clamp(18px, 2.4vw, 34px);
   align-items: start;
 }
@@ -1587,7 +1592,7 @@ th {
   max-width: 900px;
   color: #181916;
   font-family: Georgia, "Times New Roman", serif;
-  font-size: clamp(2.5rem, 5.2vw, 6.4rem);
+  font-size: clamp(2.4rem, 4.6vw, 5.6rem);
   font-weight: 500;
   letter-spacing: 0;
   line-height: 0.92;
@@ -1735,6 +1740,11 @@ th {
   align-items: start;
   justify-content: space-between;
   gap: 14px;
+  min-width: 0;
+}
+
+.fashion-panel-heading > div {
+  min-width: 0;
 }
 
 .fashion-panel-heading p {
@@ -1760,6 +1770,7 @@ th {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  flex: 0 0 auto;
   min-height: 44px;
   padding: 0 16px;
   border: 1px solid #181916;
@@ -1898,6 +1909,69 @@ th {
 .fashion-advanced[open] {
   display: grid;
   gap: 12px;
+}
+
+.fashion-studio-settings {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.fashion-studio-settings .form-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(112px, 0.54fr);
+  gap: 10px;
+}
+
+.fashion-studio-settings .form-grid .field:last-child {
+  grid-column: 1 / -1;
+}
+
+.fashion-studio-settings .field span,
+.fashion-studio-settings .metric-tile span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fashion-studio-settings .field input,
+.fashion-studio-settings .field select {
+  width: 100%;
+  min-width: 0;
+}
+
+.fashion-studio-settings .tryon-detail-grid {
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 8px;
+}
+
+.fashion-studio-settings .metric-tile {
+  gap: 7px;
+  min-height: 74px;
+  padding: 10px 12px;
+}
+
+.fashion-studio-settings .metric-tile strong {
+  overflow: hidden;
+  font-size: 1.14rem;
+  line-height: 1.1;
+  overflow-wrap: normal;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fashion-studio-settings .asset-current {
+  padding: 10px 12px;
+}
+
+.fashion-studio-settings .asset-current strong {
+  max-width: 100%;
+}
+
+.fashion-studio-settings .report-grid {
+  grid-template-columns: 1fr;
+}
+
+.fashion-studio-settings .empty-state {
+  margin: 0;
 }
 
 .fashion-saved-looks {
@@ -2889,6 +2963,10 @@ th {
   .fashion-panel-heading {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .fashion-studio-settings .form-grid {
+    grid-template-columns: 1fr;
   }
 
   .fashion-run-button {

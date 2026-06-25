@@ -109,7 +109,9 @@ class InMemoryJobQueue:
             queue_depth = self.queue_depth_locked()
             queued_snapshot = record.to_dict(include_result=False)
         _notify_job_update(on_update, queued_snapshot)
-        self._executor.submit(self._run, job_id, deepcopy(payload), runner, on_update)
+        runner_payload = deepcopy(payload)
+        runner_payload.setdefault("job_id", job_id)
+        self._executor.submit(self._run, job_id, runner_payload, runner, on_update)
         accepted = record.to_dict(include_result=False)
         accepted["status"] = "accepted"
         accepted["queue_depth"] = queue_depth

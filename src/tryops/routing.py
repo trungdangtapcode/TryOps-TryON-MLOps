@@ -21,7 +21,7 @@ def resolve_model_alias(workload: str, model_alias: str) -> dict[str, str]:
     if workload == "llm":
         if model_alias not in SUPPORTED_LLM_ALIASES:
             raise ValueError(f"unsupported LLM alias '{model_alias}'")
-        return {"workload": workload, "model_alias": model_alias, "adapter": "tryops-rule-baseline"}
+        return {"workload": workload, "model_alias": model_alias, "adapter": "openai-compatible-vllm"}
     if workload == "vton":
         if model_alias not in SUPPORTED_VTON_ALIASES:
             raise ValueError(f"unsupported VTON alias '{model_alias}'")
@@ -134,7 +134,7 @@ def apply_fallback_route(
     fallback_alias: str,
     route_health: dict[str, str],
 ) -> dict[str, Any]:
-    """Switch an unhealthy optimized LLM route back to the deterministic baseline."""
+    """Return explicit fallback metadata without changing production LLM routing."""
 
     if workload != "llm":
         return {
@@ -146,7 +146,7 @@ def apply_fallback_route(
             },
         }
     if fallback_alias != "baseline":
-        raise ValueError("fallback_alias must be 'baseline' for the local LLM fallback policy")
+        raise ValueError("fallback_alias must be 'baseline' for disabled fallback metadata")
 
     primary_alias = str(decision["primary_alias"])
     primary_status = route_health.get(primary_alias, "unknown")
@@ -157,31 +157,9 @@ def apply_fallback_route(
         "fallback_alias": fallback_alias,
         "fallback_adapter": fallback_route["adapter"],
         "primary_health_status": primary_status,
+        "reason": "fallback disabled; real model serving is required",
     }
-    if primary_alias == fallback_alias:
-        fallback["reason"] = "primary already uses baseline"
-        return {**decision, "fallback": fallback}
-    if _route_is_healthy(primary_status):
-        fallback["reason"] = "primary route healthy"
-        return {**decision, "fallback": fallback}
-
-    updated = {
-        **decision,
-        "primary_alias": fallback_alias,
-        "primary_adapter": fallback_route["adapter"],
-        "pre_fallback_alias": primary_alias,
-        "pre_fallback_adapter": decision["primary_adapter"],
-        "reason": "fallback_to_baseline",
-        "fallback": {
-            **fallback,
-            "applied": True,
-            "reason": f"primary route status '{primary_status}' is not healthy",
-        },
-    }
-    if "shadow_alias" in updated and updated["shadow_alias"] == fallback_alias:
-        updated.pop("shadow_alias", None)
-        updated.pop("shadow_adapter", None)
-    return updated
+    return {**decision, "fallback": fallback}
 
 
 def _route_is_healthy(status: str) -> bool:
