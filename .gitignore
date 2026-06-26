@@ -13,6 +13,7 @@ web/dist/
 .env
 mlruns/
 artifacts/
+data/
 data/raw/
 data/validated/
 data/processed/
@@ -30,3 +31,4 @@ test/
 image.png
 image-*.png
 Data_preprocessing.zip
+data/

@@ -2,6 +2,7 @@ services:
   loki:
     profiles: ["observability"]
     image: grafana/loki:3.7.2
+    init: true
     user: "${TRYOPS_CONTAINER_UID:-1000}:${TRYOPS_CONTAINER_GID:-1000}"
     restart: unless-stopped
     mem_limit: 512m
@@ -15,6 +16,7 @@ services:
   tempo:
     profiles: ["observability"]
     image: grafana/tempo:2.8.1
+    init: true
     user: "${TRYOPS_CONTAINER_UID:-1000}:${TRYOPS_CONTAINER_GID:-1000}"
     restart: unless-stopped
     mem_limit: 768m
@@ -30,6 +32,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.otel-bridge
+    init: true
     user: "${TRYOPS_CONTAINER_UID:-1000}:${TRYOPS_CONTAINER_GID:-1000}"
     restart: unless-stopped
     mem_limit: 128m

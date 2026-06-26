@@ -89,7 +89,7 @@ services:
       - "${TRYOPS_MINIO_PORT:-9000}:9000"
       - "${TRYOPS_MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - minio-data:/data
+      - ${TRYOPS_MINIO_DATA_DIR:-./artifacts/minio-data}:/data
 
   mlflow:
     build:
@@ -129,6 +129,8 @@ services:
   prometheus:
     image: prom/prometheus:latest
     restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${TRYOPS_PROMETHEUS_PORT:-9090}:9090"
     volumes:
@@ -248,7 +250,7 @@ services:
       TRYOPS_ENV: local
       MLFLOW_TRACKING_URI: http://mlflow:5000
       TRYOPS_GUARDRAIL_URL: http://guardrail:18083/v1/guardrails/evaluate
-      TRYOPS_REAL_VTON_URL: ${TRYOPS_REAL_VTON_URL:-http://host.docker.internal:18101}
+      TRYOPS_REAL_VTON_URL: ${TRYOPS_REAL_VTON_URL:-http://host.docker.internal:18100}
       TRYOPS_REQUIRE_REAL_MODELS: ${TRYOPS_REQUIRE_REAL_MODELS:-1}
       TRYOPS_ALLOW_DETERMINISTIC_BASELINE: ${TRYOPS_ALLOW_DETERMINISTIC_BASELINE:-0}
       TRYOPS_ALLOW_LLM_SEMANTIC_CACHE: ${TRYOPS_ALLOW_LLM_SEMANTIC_CACHE:-0}
@@ -404,7 +406,6 @@ volumes:
   alertmanager-data:
   postgres-data:
   valkey-data:
-  minio-data:
   grafana-data:
 
 secrets:

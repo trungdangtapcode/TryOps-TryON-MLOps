@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import sys
 import unittest
 from pathlib import Path
@@ -36,6 +37,15 @@ class DashboardTests(unittest.TestCase):
         self.assertIn("uid: prometheus", datasource)
         self.assertIn("url: http://prometheus:9090", datasource)
 
+    def test_observability_long_running_services_use_init(self) -> None:
+        compose = (ROOT / "docker-compose.observability.yml").read_text(encoding="utf-8")
+
+        for service_name in ("loki", "tempo", "tryops-otel-bridge"):
+            match = re.search(rf"^  {service_name}:\n(?P<body>.*?)(?=^  \S|\Z)", compose, re.M | re.S)
+            self.assertIsNotNone(match)
+            service_block = match.group("body") if match else ""
+            self.assertIn("init: true", service_block)
+
     def test_cost_dashboard_has_energy_and_cost_correlation_panels(self) -> None:
         dashboard = (ROOT / "infra/grafana/dashboards/tryops-cost-capacity.json").read_text(encoding="utf-8")
 
@@ -55,9 +65,12 @@ class DashboardTests(unittest.TestCase):
 
         self.assertIn("uid: loki", datasource)
         self.assertIn("uid: tempo", datasource)
+        self.assertIn("TRYOPS_REAL_VTON_URL Logs", dashboard)
         self.assertIn("FASHN VTON Service Logs", dashboard)
         self.assertIn("Async Job Lifecycle Logs", dashboard)
         self.assertIn("Error Logs", dashboard)
+        self.assertIn("tryops.real_vton_url", dashboard)
+        self.assertIn("tryops.fashn_router", dashboard)
         self.assertIn("tryops.fashn_vton", dashboard)
         self.assertIn("tryops.job.status", dashboard)
 

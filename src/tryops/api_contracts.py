@@ -84,7 +84,7 @@ def readiness_state() -> dict[str, Any]:
             "vton_fashn": {
                 "status": "configured" if "TRYOPS_REAL_VTON_URL" in os.environ else "external_service_required",
                 "adapter": "fashn-vton-http",
-                "reason": "start the host GPU service with `make fashn-vton-service` for champion VTON",
+                "reason": "start the host GPU router with `make fashn-vton-router-bg` for champion VTON",
             },
             "llm_real": {
                 "status": "configured" if "TRYOPS_LLM_BASE_URL" in os.environ else "external_service_required",

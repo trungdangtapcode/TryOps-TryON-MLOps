@@ -1,9 +1,9 @@
 .PHONY: test validate-sample validate-bad pipeline-sample deploy-package-sample rollback-sample chaos-sample quota-sample native-quota-ledger-smoke auth-sample supply-chain-sample model-supply-chain-sample vulnerability-scan-sample evaluation-index-sample dvc-minio-sample finops-sample orchestration-sample vton-baseline-sample vton-preprocess-sample vton-real-sample vton-job-sample vton-native-api-sample vton-garment-similarity-sample vton-clip-similarity-sample vton-compare-sample vton-advanced-eval-sample llm-baseline-sample llm-benchmark-sample llm-real-sample llm-pareto-sample llm-optimization-report-sample llm-sensitivity-sample llm-continuous-batching-sample llm-vllm-probe-sample llm-quantized-preflight-sample eval-leaderboard-sample experiment-routing-sample experiment-analysis-sample llm-fallback-sample llm-load-sample guardrail-sample alert-sample slo-burn-rate-sample dashboard-sample drift-sample trace-sample endpoint-smoke-sample governance-sample benchmark-sample registry-webhook-sample signed-pr-promotion-sample native-cpp-cli-build native-image-metrics-build native-image-metrics-sample native-perf-stats-build native-perf-stats-sample native-burn-rate-build native-energy-stats-build native-eval-stats-build native-experiment-router-build native-experiment-stats-build native-batch-scheduler-build native-vton-eval-build native-model-scan-build native-model-provenance-build native-openlineage-build native-gitops-build native-semantic-cache-build native-semantic-cache-test native-chaos-build energy-demo-sample energy-sample native-vton-preprocess-build native-vton-preprocess-sample native-policy-sample native-cpp-test native-benchmark-build native-benchmark-test native-fullstack-load-build native-fullstack-load-test native-fullstack-load-sample native-vllm-probe-build native-vllm-probe-test native-quantized-preflight-build native-quantized-preflight-test native-stack-smoke-build native-stack-smoke-test native-job-runner-build native-job-runner-test native-job-runner-sample native-slo-gate-build native-slo-gate-test native-slo-gate-sample native-event-dispatcher-build native-event-dispatcher-test native-event-dispatcher-sample native-data-versioning-build native-data-versioning-test native-demo-acceptance-build native-demo-acceptance-test native-demo-recorder-build native-demo-recorder-test professor-demo-acceptance professor-demo-refresh-acceptance professor-demo-video native-vuln-scan-build native-vuln-scan-test native-config-contract-build native-config-contract-test native-config-contract-sample native-performance-budget-build native-performance-budget-test native-performance-budget-sample native-evaluation-index-build native-evaluation-index-test native-guardrail-build native-guardrail-test native-guardrail-smoke native-edge-cache-smoke native-edge-guardrail-smoke native-go-build native-go-test native-go-smoke native-rust-build native-rust-test native-rust-smoke native-static-smoke gateway-benchmark gateway-benchmark-native native-tooling web-build web-typecheck app-up app-up-hotreload app-dev app-smoke app-down db-init roadmap-status smoke
 
-ifneq (,$(wildcard .env))
-include .env
-endif
-export TRYOPS_REQUIRE_REAL_MODELS TRYOPS_LLM_PROVIDER TRYOPS_LLM_BASE_URL TRYOPS_LLM_MODEL TRYOPS_LLM_API_KEY TRYOPS_LLM_TIMEOUT_SECONDS TRYOPS_LLM_TEMPERATURE TRYOPS_ALLOW_DETERMINISTIC_BASELINE TRYOPS_ALLOW_LLM_SEMANTIC_CACHE TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE TRYOPS_ENABLE_LOCAL_API_KEYS TRYOPS_ENABLE_DEV_API_KEY_FALLBACK TRYOPS_REAL_VTON_URL HF_TOKEN HUGGINGFACE_HUB_TOKEN HF_HOME HF_HUB_CACHE HF_XET_CACHE HF_HUB_DISABLE_XET
+# Load template defaults first; local .env overrides any values it sets.
+-include .env.example
+-include .env
+export TRYOPS_REQUIRE_REAL_MODELS TRYOPS_LLM_PROVIDER TRYOPS_LLM_BASE_URL TRYOPS_LLM_MODEL TRYOPS_LLM_API_KEY TRYOPS_LLM_TIMEOUT_SECONDS TRYOPS_LLM_TEMPERATURE TRYOPS_ALLOW_DETERMINISTIC_BASELINE TRYOPS_ALLOW_LLM_SEMANTIC_CACHE TRYOPS_ALLOW_LEXICAL_SEMANTIC_CACHE TRYOPS_ENABLE_LOCAL_API_KEYS TRYOPS_ENABLE_DEV_API_KEY_FALLBACK TRYOPS_REAL_VTON_URL TRYOPS_FASHN_GPU_IDS TRYOPS_FASHN_WORKER_TRANSPORT TRYOPS_FASHN_WORKER_SOCKET_DIR TRYOPS_FASHN_WORKER_BASE_PORT TRYOPS_FASHN_WORKER_PRELOAD TRYOPS_FASHN_REQUIRE_CUDA TRYOPS_FASHN_ALLOW_CPU_FALLBACK HF_TOKEN HUGGINGFACE_HUB_TOKEN HF_HOME HF_HUB_CACHE HF_XET_CACHE HF_HUB_DISABLE_XET
 
 PYTHONPATH := src
 CXX ?= g++
@@ -38,9 +38,15 @@ FASHN_VTON_PYTHON ?= $(FASHN_VTON_VENV)/bin/python
 FASHN_VTON_WEIGHTS_DIR ?= artifacts/models/fashn-vton-1.5
 FASHN_VTON_HOST ?= 0.0.0.0
 FASHN_VTON_PORT ?= 18101
+FASHN_VTON_ROUTER_HOST ?= 0.0.0.0
+FASHN_VTON_ROUTER_PORT ?= 18100
 FASHN_VTON_PID_FILE ?= artifacts/runtime/fashn-vton-service.pid
 FASHN_VTON_LOG ?= artifacts/logs/fashn-vton-service.log
+FASHN_VTON_ROUTER_PID_FILE ?= artifacts/runtime/fashn-vton-router.pid
+FASHN_VTON_ROUTER_LOG ?= artifacts/logs/fashn-vton-router.log
 FASHN_VTON_STRUCTURED_LOG ?= artifacts/logs/fashn_vton_events.jsonl
+FASHN_VTON_ROUTER_STRUCTURED_LOG ?= artifacts/logs/fashn_vton_router_events.jsonl
+FASHN_VTON_ROUTER_READY_TIMEOUT_SECONDS ?= 300
 FASHN_VTON_GPU_FIRST_LOAD ?= 1
 FASHN_VTON_CUDA_MODULE_LOADING ?= LAZY
 FASHN_VTON_CUDA_ALLOC_CONF ?= expandable_segments:True
@@ -57,6 +63,21 @@ TRYOPS_XDG_CACHE_HOME ?= $(CURDIR)/artifacts/cache/xdg
 TRYOPS_TMPDIR ?= $(CURDIR)/artifacts/cache/tmp
 TRYOPS_HF_HUB_DISABLE_XET ?= $(if $(HF_HUB_DISABLE_XET),$(HF_HUB_DISABLE_XET),1)
 FASHN_HF_ENV = HF_HOME="$(TRYOPS_HF_HOME)" HF_HUB_CACHE="$(TRYOPS_HF_HUB_CACHE)" HF_XET_CACHE="$(TRYOPS_HF_XET_CACHE)" XDG_CACHE_HOME="$(TRYOPS_XDG_CACHE_HOME)" TMPDIR="$(TRYOPS_TMPDIR)" HF_HUB_DISABLE_XET="$(TRYOPS_HF_HUB_DISABLE_XET)"
+TRYOPS_REAL_VTON_URL ?= http://host.docker.internal:$(FASHN_VTON_ROUTER_PORT)
+TRYOPS_FASHN_GPU_IDS ?= 0
+TRYOPS_FASHN_WORKER_TRANSPORT ?= unix
+TRYOPS_FASHN_WORKER_SOCKET_DIR ?= artifacts/runtime/fashn-workers
+TRYOPS_FASHN_WORKER_BASE_PORT ?= 43100
+TRYOPS_FASHN_WORKER_PRELOAD ?= 1
+TRYOPS_FASHN_REQUIRE_CUDA ?= 1
+TRYOPS_FASHN_ALLOW_CPU_FALLBACK ?= 0
+TRYOPS_FASHN_GPU_IDS_EFFECTIVE := $(if $(strip $(TRYOPS_FASHN_GPU_IDS)),$(TRYOPS_FASHN_GPU_IDS),0)
+TRYOPS_FASHN_WORKER_TRANSPORT_EFFECTIVE := $(if $(strip $(TRYOPS_FASHN_WORKER_TRANSPORT)),$(TRYOPS_FASHN_WORKER_TRANSPORT),unix)
+TRYOPS_FASHN_WORKER_SOCKET_DIR_EFFECTIVE := $(if $(strip $(TRYOPS_FASHN_WORKER_SOCKET_DIR)),$(TRYOPS_FASHN_WORKER_SOCKET_DIR),artifacts/runtime/fashn-workers)
+TRYOPS_FASHN_WORKER_BASE_PORT_EFFECTIVE := $(if $(strip $(TRYOPS_FASHN_WORKER_BASE_PORT)),$(TRYOPS_FASHN_WORKER_BASE_PORT),43100)
+TRYOPS_FASHN_WORKER_PRELOAD_EFFECTIVE := $(if $(strip $(TRYOPS_FASHN_WORKER_PRELOAD)),$(TRYOPS_FASHN_WORKER_PRELOAD),1)
+TRYOPS_FASHN_REQUIRE_CUDA_EFFECTIVE := $(if $(strip $(TRYOPS_FASHN_REQUIRE_CUDA)),$(TRYOPS_FASHN_REQUIRE_CUDA),1)
+TRYOPS_FASHN_ALLOW_CPU_FALLBACK_EFFECTIVE := $(if $(strip $(TRYOPS_FASHN_ALLOW_CPU_FALLBACK)),$(TRYOPS_FASHN_ALLOW_CPU_FALLBACK),0)
 TRYOPS_OBSERVABILITY ?= 1
 TRYOPS_HOT_RELOAD ?= 0
 TRYOPS_WEB_DEV_PORT ?= 18173
@@ -65,10 +86,18 @@ TRYOPS_FASHN_MIN_AVAILABLE_MB ?= 4096
 TRYOPS_APP_BUILD_BASE_IMAGES ?= python:3.12-slim-bookworm node:24-slim rust:1-slim-bookworm debian:bookworm-slim golang:1.26.4-alpine alpine:3.20 ghcr.io/mlflow/mlflow:v2.14.3
 TRYOPS_APP_BASE_PULL_ATTEMPTS ?= 4
 TRYOPS_APP_BASE_PULL_DELAY_SECONDS ?= 8
+TRYOPS_BENCHMARK_WORKLOADS ?= vton
+TRYOPS_BENCHMARK_REQUESTS ?= 3
+TRYOPS_BENCHMARK_CONCURRENCY ?= 1
+TRYOPS_BENCHMARK_VTON_REQUESTS ?= 10
+TRYOPS_BENCHMARK_DATA_DIR ?= data
+TRYOPS_BENCHMARK_EXPERIMENT ?= tryops-vton-benchmark
+TRYOPS_BENCHMARK_API_KEY ?= tryops-admin-demo-key
 
 .PHONY: native-gguf-preflight-build native-gguf-preflight-test llm-gguf-preflight-sample
+.PHONY: benchmark-vton
 .PHONY: llm-vllm-service-bg llm-vllm-stop
-.PHONY: fashn-vton-venv fashn-vton-optimize-loader fashn-vton-download fashn-vton-service fashn-vton-service-bg fashn-vton-stop fashn-vton-sample
+.PHONY: fashn-vton-venv fashn-vton-optimize-loader fashn-vton-download fashn-vton-service fashn-vton-service-bg fashn-vton-stop fashn-vton-router fashn-vton-router-bg fashn-vton-router-stop fashn-vton-workers-status fashn-vton-sample
 .PHONY: app-pull-build-bases
 .PHONY: app-prune-build-cache
 .PHONY: native-trace-envelope-cpp-build native-trace-envelope-cpp-test native-trace-envelope-build native-trace-envelope-test native-trace-envelope-sample
@@ -349,6 +378,18 @@ llm-fallback-sample:
 
 llm-load-sample:
 	PYTHONPATH=$(PYTHONPATH) python scripts/load_test_llm.py --concurrency 4 --requests 12 --output artifacts/eval/llm_load/load_test.json
+
+benchmark-vton:
+	PYTHONPATH=$(PYTHONPATH) python3 scripts/benchmark_vton_mlflow.py \
+		--base-url "$${TRYOPS_STACK_GATEWAY_URL:-http://127.0.0.1:$${TRYOPS_GATEWAY_PORT:-18081}}" \
+		--mlflow-uri "$${TRYOPS_STACK_MLFLOW_URL:-http://127.0.0.1:$${TRYOPS_MLFLOW_PORT:-15000}}" \
+		--experiment "$(TRYOPS_BENCHMARK_EXPERIMENT)" \
+		--api-key "$(TRYOPS_BENCHMARK_API_KEY)" \
+		--workloads "$(TRYOPS_BENCHMARK_WORKLOADS)" \
+		--requests "$(TRYOPS_BENCHMARK_REQUESTS)" \
+		--concurrency "$(TRYOPS_BENCHMARK_CONCURRENCY)" \
+		--vton-requests "$(TRYOPS_BENCHMARK_VTON_REQUESTS)" \
+		--data-dir "$(TRYOPS_BENCHMARK_DATA_DIR)"
 
 guardrail-sample: native-guardrail-build
 	TRYOPS_NATIVE_GUARDRAIL_CLI=artifacts/native/tryops_guardrail_cli PYTHONPATH=$(PYTHONPATH) python scripts/evaluate_guardrails.py --output artifacts/eval/guardrails/guardrail_report.json
@@ -1441,7 +1482,7 @@ app-up:
 		exit 1; \
 	fi; \
 	$(MAKE) llm-vllm-service-bg; \
-	$(MAKE) fashn-vton-service-bg; \
+	$(MAKE) fashn-vton-router-bg; \
 	$(MAKE) prepare-container-artifacts; \
 	$(MAKE) app-pull-build-bases; \
 	uid=$$(id -u); gid=$$(id -g); \
@@ -1494,6 +1535,7 @@ app-up:
 	TRYOPS_API_PORT=$${TRYOPS_API_PORT:-18080} \
 	TRYOPS_GATEWAY_PORT=$${TRYOPS_GATEWAY_PORT:-18081} \
 	TRYOPS_WEB_DEV_PORT=$${TRYOPS_WEB_DEV_PORT:-$(TRYOPS_WEB_DEV_PORT)} \
+	TRYOPS_REAL_VTON_URL=$${TRYOPS_REAL_VTON_URL:-http://host.docker.internal:$(FASHN_VTON_ROUTER_PORT)} \
 	TRYOPS_APP_POSTGRES_DSN="$${TRYOPS_APP_POSTGRES_DSN:-host=postgres port=5432 user=tryops password=tryops-local-postgres dbname=tryops}" \
 	TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN="$${TRYOPS_GATEWAY_QUOTA_POSTGRES_DSN:-host=postgres port=5432 user=tryops password=tryops-local-postgres dbname=tryops}" \
 		docker compose $$compose_files $$compose_profiles up --build -d $$services; \
@@ -1572,6 +1614,7 @@ app-smoke: native-stack-smoke-build native-job-runner-build evaluation-index-sam
 
 app-down:
 	$(MAKE) llm-vllm-stop
+	$(MAKE) fashn-vton-router-stop
 	$(MAKE) fashn-vton-stop
 	docker compose -f docker-compose.yml -f docker-compose.hot-reload.yml -f docker-compose.observability.yml --profile ops --profile observability down --remove-orphans
 
@@ -1598,7 +1641,7 @@ fashn-vton-venv:
 	$(MAKE) fashn-vton-optimize-loader; \
 	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" -m pip install --index-url "$(FASHN_VTON_TORCH_INDEX_URL)" "$(FASHN_VTON_TORCH_PACKAGE)" "$(FASHN_VTON_TORCHVISION_PACKAGE)"; \
 	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" -m pip install -e "$(FASHN_VTON_REPO)" --no-deps; \
-	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" -m pip install "$(FASHN_VTON_ONNXRUNTIME_PACKAGE)" einops fashn-human-parser matplotlib
+	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" -m pip install "$(FASHN_VTON_ONNXRUNTIME_PACKAGE)" safetensors huggingface_hub pillow numpy opencv-python tqdm einops fashn-human-parser matplotlib
 
 fashn-vton-optimize-loader:
 	python3 scripts/patch_fashn_vton_gpu_loader.py "$(FASHN_VTON_REPO)"
@@ -1606,6 +1649,109 @@ fashn-vton-optimize-loader:
 fashn-vton-download: fashn-vton-venv
 	@mkdir -p "$(TRYOPS_HF_HOME)" "$(TRYOPS_HF_HUB_CACHE)" "$(TRYOPS_HF_XET_CACHE)" "$(TRYOPS_XDG_CACHE_HOME)" "$(TRYOPS_TMPDIR)"
 	$(FASHN_HF_ENV) "$(FASHN_VTON_PYTHON)" "$(FASHN_VTON_REPO)/scripts/download_weights.py" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
+
+fashn-vton-router: fashn-vton-optimize-loader
+	@test -x "$(FASHN_VTON_PYTHON)" || { echo "missing $(FASHN_VTON_PYTHON); run: make fashn-vton-venv"; exit 1; }
+	@test -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" || { echo "missing FASHN weights; run: make fashn-vton-download"; exit 1; }
+	$(FASHN_HF_ENV) LD_LIBRARY_PATH="$(FASHN_VTON_LD_LIBRARY_PATH)" CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" FASHN_VTON_PYTHON="$(FASHN_VTON_PYTHON)" FASHN_VTON_WEIGHTS_DIR="$(FASHN_VTON_WEIGHTS_DIR)" TRYOPS_FASHN_ROUTER_STRUCTURED_LOG_PATH="$(FASHN_VTON_ROUTER_STRUCTURED_LOG)" TRYOPS_FASHN_MIN_AVAILABLE_MB="$(TRYOPS_FASHN_MIN_AVAILABLE_MB)" TRYOPS_FASHN_GPU_IDS="$(TRYOPS_FASHN_GPU_IDS_EFFECTIVE)" TRYOPS_FASHN_WORKER_TRANSPORT="$(TRYOPS_FASHN_WORKER_TRANSPORT_EFFECTIVE)" TRYOPS_FASHN_WORKER_SOCKET_DIR="$(TRYOPS_FASHN_WORKER_SOCKET_DIR_EFFECTIVE)" TRYOPS_FASHN_WORKER_BASE_PORT="$(TRYOPS_FASHN_WORKER_BASE_PORT_EFFECTIVE)" TRYOPS_FASHN_WORKER_PRELOAD="$(TRYOPS_FASHN_WORKER_PRELOAD_EFFECTIVE)" TRYOPS_FASHN_REQUIRE_CUDA="$(TRYOPS_FASHN_REQUIRE_CUDA_EFFECTIVE)" TRYOPS_FASHN_ALLOW_CPU_FALLBACK="$(TRYOPS_FASHN_ALLOW_CPU_FALLBACK_EFFECTIVE)" "$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton_router.py --host "$(FASHN_VTON_ROUTER_HOST)" --port "$(FASHN_VTON_ROUTER_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)"
+
+fashn-vton-router-bg:
+	@if [ ! -x "$(FASHN_VTON_PYTHON)" ] || [ ! -s "$(FASHN_VTON_WEIGHTS_DIR)/model.safetensors" ]; then \
+		echo "Preparing FASHN VTON runtime. This can take a while the first time."; \
+		$(MAKE) fashn-vton-download; \
+	fi
+	@$(MAKE) fashn-vton-optimize-loader
+	@set -eu; \
+	mkdir -p "$$(dirname "$(FASHN_VTON_ROUTER_PID_FILE)")" "$$(dirname "$(FASHN_VTON_ROUTER_LOG)")" "$(TRYOPS_FASHN_WORKER_SOCKET_DIR_EFFECTIVE)" "$$(dirname "$(FASHN_VTON_STRUCTURED_LOG)")" "$$(dirname "$(FASHN_VTON_ROUTER_STRUCTURED_LOG)")"; \
+	if [ -f "$(FASHN_VTON_ROUTER_PID_FILE)" ]; then \
+		pid=$$(cat "$(FASHN_VTON_ROUTER_PID_FILE)" 2>/dev/null || true); \
+		if [ -n "$$pid" ] && kill -0 "$$pid" 2>/dev/null; then \
+			if curl -fsS --max-time 2 "http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)/ready" >/dev/null 2>&1; then \
+				echo "FASHN VTON router already ready: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)"; \
+				echo "worker registry: artifacts/runtime/fashn-vton-workers.json"; \
+				exit 0; \
+			fi; \
+			echo "FASHN VTON router is running but no real worker is ready: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)"; \
+			echo "Last router/worker logs:"; \
+			tail -80 "$(FASHN_VTON_ROUTER_LOG)" 2>/dev/null || true; \
+			for f in artifacts/logs/fashn-vton-worker-*.log; do [ -e "$$f" ] && { echo "### $$f"; tail -80 "$$f"; }; done; \
+			exit 1; \
+		fi; \
+		rm -f "$(FASHN_VTON_ROUTER_PID_FILE)"; \
+	fi; \
+	if curl -fsS --max-time 2 "http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)/health" >/dev/null 2>&1; then \
+		if curl -fsS --max-time 2 "http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)/ready" >/dev/null 2>&1; then \
+			echo "FASHN VTON router already ready: http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)"; \
+			echo "worker registry: artifacts/runtime/fashn-vton-workers.json"; \
+			exit 0; \
+		fi; \
+		echo "FASHN VTON router is reachable but no real worker is ready: http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)"; \
+		curl -fsS "http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)/health" || true; \
+		exit 1; \
+	fi; \
+	$(FASHN_HF_ENV) LD_LIBRARY_PATH="$(FASHN_VTON_LD_LIBRARY_PATH)" CUDA_MODULE_LOADING="$(FASHN_VTON_CUDA_MODULE_LOADING)" PYTORCH_CUDA_ALLOC_CONF="$(FASHN_VTON_CUDA_ALLOC_CONF)" FASHN_VTON_GPU_FIRST_LOAD="$(FASHN_VTON_GPU_FIRST_LOAD)" FASHN_VTON_PYTHON="$(FASHN_VTON_PYTHON)" FASHN_VTON_WEIGHTS_DIR="$(FASHN_VTON_WEIGHTS_DIR)" TRYOPS_FASHN_ROUTER_STRUCTURED_LOG_PATH="$(FASHN_VTON_ROUTER_STRUCTURED_LOG)" TRYOPS_FASHN_MIN_AVAILABLE_MB="$(TRYOPS_FASHN_MIN_AVAILABLE_MB)" TRYOPS_FASHN_GPU_IDS="$(TRYOPS_FASHN_GPU_IDS_EFFECTIVE)" TRYOPS_FASHN_WORKER_TRANSPORT="$(TRYOPS_FASHN_WORKER_TRANSPORT_EFFECTIVE)" TRYOPS_FASHN_WORKER_SOCKET_DIR="$(TRYOPS_FASHN_WORKER_SOCKET_DIR_EFFECTIVE)" TRYOPS_FASHN_WORKER_BASE_PORT="$(TRYOPS_FASHN_WORKER_BASE_PORT_EFFECTIVE)" TRYOPS_FASHN_WORKER_PRELOAD="$(TRYOPS_FASHN_WORKER_PRELOAD_EFFECTIVE)" TRYOPS_FASHN_REQUIRE_CUDA="$(TRYOPS_FASHN_REQUIRE_CUDA_EFFECTIVE)" TRYOPS_FASHN_ALLOW_CPU_FALLBACK="$(TRYOPS_FASHN_ALLOW_CPU_FALLBACK_EFFECTIVE)" setsid "$(FASHN_VTON_PYTHON)" scripts/serve_fashn_vton_router.py --host "$(FASHN_VTON_ROUTER_HOST)" --port "$(FASHN_VTON_ROUTER_PORT)" --weights-dir "$(FASHN_VTON_WEIGHTS_DIR)" > "$(FASHN_VTON_ROUTER_LOG)" 2>&1 < /dev/null & \
+	pid=$$!; \
+	echo "$$pid" > "$(FASHN_VTON_ROUTER_PID_FILE)"; \
+	attempt=0; \
+	while [ "$$attempt" -lt "$(FASHN_VTON_ROUTER_READY_TIMEOUT_SECONDS)" ]; do \
+		if curl -fsS --max-time 2 "http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)/ready" >/dev/null 2>&1; then \
+			echo "FASHN VTON router ready: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)"; \
+			echo "logs: $(FASHN_VTON_ROUTER_LOG)"; \
+			echo "worker registry: artifacts/runtime/fashn-vton-workers.json"; \
+			echo "worker logs: artifacts/logs/fashn-vton-worker-*.log"; \
+			exit 0; \
+		fi; \
+		if ! kill -0 "$$pid" 2>/dev/null; then \
+			echo "FASHN VTON router exited during startup. Last logs:"; \
+			tail -120 "$(FASHN_VTON_ROUTER_LOG)" 2>/dev/null || true; \
+			rm -f "$(FASHN_VTON_ROUTER_PID_FILE)"; \
+			exit 1; \
+		fi; \
+		attempt=$$((attempt + 1)); \
+		sleep 1; \
+	done; \
+	echo "FASHN VTON router did not become ready within $(FASHN_VTON_ROUTER_READY_TIMEOUT_SECONDS)s: pid=$$pid url=http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)"; \
+	echo "router health:"; \
+	curl -fsS "http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)/health" || true; \
+	echo "Last router/worker logs:"; \
+	tail -120 "$(FASHN_VTON_ROUTER_LOG)" 2>/dev/null || true; \
+	for f in artifacts/logs/fashn-vton-worker-*.log; do [ -e "$$f" ] && { echo "### $$f"; tail -120 "$$f"; }; done; \
+	exit 1
+
+fashn-vton-router-stop:
+	@set -eu; \
+	if [ ! -f "$(FASHN_VTON_ROUTER_PID_FILE)" ]; then \
+		echo "FASHN VTON router is not tracked by $(FASHN_VTON_ROUTER_PID_FILE)"; \
+		exit 0; \
+	fi; \
+	pid=$$(cat "$(FASHN_VTON_ROUTER_PID_FILE)" 2>/dev/null || true); \
+	if [ -z "$$pid" ] || ! kill -0 "$$pid" 2>/dev/null; then \
+		rm -f "$(FASHN_VTON_ROUTER_PID_FILE)"; \
+		echo "FASHN VTON router was not running"; \
+		exit 0; \
+	fi; \
+	kill "$$pid"; \
+	for _ in 1 2 3 4 5 6 7 8 9 10; do \
+		if ! kill -0 "$$pid" 2>/dev/null; then \
+			rm -f "$(FASHN_VTON_ROUTER_PID_FILE)"; \
+			echo "FASHN VTON router stopped: pid=$$pid"; \
+			exit 0; \
+		fi; \
+		sleep 1; \
+	done; \
+	echo "FASHN VTON router did not stop after SIGTERM; leaving pid file for inspection: $$pid"; \
+	exit 1
+
+fashn-vton-workers-status:
+	@set -eu; \
+	echo "router health:"; \
+	curl -fsS "http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)/health"; \
+	echo; \
+	echo "router readiness:"; \
+	curl -fsS "http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)/ready" || true; \
+	echo; \
+	echo "router metrics:"; \
+	curl -fsS "http://127.0.0.1:$(FASHN_VTON_ROUTER_PORT)/metrics" | head -80
 
 fashn-vton-service: fashn-vton-optimize-loader
 	@test -x "$(FASHN_VTON_PYTHON)" || { echo "missing $(FASHN_VTON_PYTHON); run: make fashn-vton-venv"; exit 1; }

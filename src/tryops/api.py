@@ -637,6 +637,7 @@ def create_app() -> Any:
             _write_vton_report_sidecar(report)
             _persist_vton_runtime_artifacts(
                 report=report,
+                clean=runtime_clean,
                 account_id=_optional_str(effective_payload.get("account_id")) or "acct_demo",
                 request_id=request_id,
             )
@@ -692,7 +693,7 @@ def create_app() -> Any:
                 request_id=request_id,
                 code="real_vton_unavailable",
                 message=str(exc),
-                details=[{"field": "TRYOPS_REAL_VTON_URL", "message": "start the FASHN VTON service"}],
+                details=[{"field": "TRYOPS_REAL_VTON_URL", "message": "start the FASHN VTON router"}],
                 workload="vton",
             )
             response["routing"] = routing
@@ -1961,6 +1962,7 @@ def _materialize_vton_artifact_inputs(
 def _persist_vton_runtime_artifacts(
     *,
     report: dict[str, Any],
+    clean: dict[str, Any],
     account_id: str,
     request_id: str,
 ) -> None:
@@ -2011,6 +2013,14 @@ def _persist_vton_runtime_artifacts(
             "object_key": output_metadata["object_key"],
             "artifact_id": output_artifact_id,
         }
+        _persist_vton_request_input_artifacts(
+            conn=conn,
+            storage=storage,
+            report=report,
+            clean=clean,
+            account_id=account_id,
+            request_id=request_id,
+        )
         report_object_key = account_object_key(account_id, "requests", request_id, "report.json")
         report_bytes = json.dumps(report, indent=2, sort_keys=True).encode("utf-8")
         report_metadata = storage.put_bytes(
@@ -2046,6 +2056,67 @@ def _persist_vton_runtime_artifacts(
     if not _truthy_env("TRYOPS_KEEP_LOCAL_RUNTIME_ARTIFACTS"):
         output_path.unlink(missing_ok=True)
         output_path.with_suffix(output_path.suffix + ".json").unlink(missing_ok=True)
+
+
+def _persist_vton_request_input_artifacts(
+    *,
+    conn: Any,
+    storage: Any,
+    report: dict[str, Any],
+    clean: dict[str, Any],
+    account_id: str,
+    request_id: str,
+) -> None:
+    from tryops import db
+
+    inputs = report.get("inputs")
+    if not isinstance(inputs, dict):
+        inputs = {}
+        report["inputs"] = inputs
+    for field, role in (("person_image_path", "person"), ("garment_image_path", "garment")):
+        source_path_text = str(clean.get(field) or "").strip()
+        if not source_path_text:
+            continue
+        source_path = Path(source_path_text)
+        if not source_path.is_file():
+            raise RuntimeArtifactError(f"VTON {role} input file does not exist: {source_path}")
+        image = read_png_rgb(source_path)
+        object_key = account_object_key(account_id, "requests", request_id, f"{role}.png")
+        metadata = storage.put_file(
+            object_key=object_key,
+            path=source_path,
+            content_type="image/png",
+        )
+        artifact_id = db.insert_artifact_object(
+            conn,
+            {
+                **metadata,
+                "account_id": account_id,
+                "request_id": request_id,
+                "role": f"vton_{role}_input",
+                "legacy_path": source_path_text,
+                "content_type": "image/png",
+                "width": image.width,
+                "height": image.height,
+                "status": "active",
+            },
+        )
+        ref = artifact_uri(artifact_id)
+        existing = inputs.get(role)
+        if not isinstance(existing, dict):
+            existing = {}
+        existing["legacy_path"] = source_path_text
+        existing["path"] = ref
+        existing["url"] = artifact_url(ref)
+        existing["storage"] = {
+            "backend": "minio",
+            "bucket": metadata["bucket"],
+            "object_key": metadata["object_key"],
+            "artifact_id": artifact_id,
+        }
+        existing["width"] = image.width
+        existing["height"] = image.height
+        inputs[role] = existing
 
 
 def _cleanup_runtime_paths(paths: list[Path]) -> None:

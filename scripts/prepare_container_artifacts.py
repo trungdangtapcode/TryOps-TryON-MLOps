@@ -46,6 +46,7 @@ BIND_SOURCE_DIRS = (
 
 WRITABLE_FILES = (
     Path("artifacts/logs/api_events.jsonl"),
+    Path("artifacts/logs/fashn_vton_router_events.jsonl"),
     Path("artifacts/logs/gateway_events.jsonl"),
     Path("artifacts/logs/gateway_tls_events.jsonl"),
     Path("artifacts/traces/api_spans.jsonl"),

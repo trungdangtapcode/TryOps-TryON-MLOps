@@ -404,9 +404,9 @@ MinIO API:         http://127.0.0.1:19000
 MinIO Console:     http://127.0.0.1:19001
 ```
 
-Grafana includes the **TryOps Observability Drilldown** dashboard. Use it to inspect
-`TRYOPS_REAL_VTON_URL` API calls, FASHN router routing decisions, FASHN worker inference
-logs, async job lifecycle logs, and error logs by `job_id`, `request_id`, or `trace_id`.
+Grafana includes the **TryOps Observability Drilldown** dashboard. Use it to inspect FASHN VTON
+model-service logs, async job lifecycle logs, and error logs by `job_id`, `request_id`, or
+`trace_id`.
 
 If port `18100` conflicts, start the router on another port and point the app at it:
 

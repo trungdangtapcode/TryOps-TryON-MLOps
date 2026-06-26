@@ -1080,14 +1080,339 @@
     },
     {
       "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "max": 1,
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 28
+      },
+      "id": 18,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "expr": "max(tryops_fashn_router_ready) or vector(0)",
+          "legendFormat": "router ready",
+          "refId": "A"
+        }
+      ],
+      "title": "FASHN Router Ready",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 28
+      },
+      "id": 19,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "expr": "sum(tryops_fashn_router_worker_ready) or vector(0)",
+          "legendFormat": "ready workers",
+          "refId": "A"
+        }
+      ],
+      "title": "FASHN Ready Workers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 18,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 28
+      },
+      "id": 20,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "tryops_fashn_router_worker_inflight or vector(0)",
+          "legendFormat": "{{worker_id}} gpu={{gpu_id}}",
+          "refId": "A"
+        }
+      ],
+      "title": "FASHN Worker In-Flight",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 18,
+            "gradientMode": "opacity",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 4,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "ms"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 28
+      },
+      "id": 21,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "(rate(tryops_fashn_router_latency_ms_sum[5m]) / clamp_min(rate(tryops_fashn_router_latency_ms_count[5m]), 0.001)) or vector(0)",
+          "legendFormat": "avg latency",
+          "refId": "A"
+        }
+      ],
+      "title": "FASHN Router Latency",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
         "type": "loki",
         "uid": "loki"
       },
       "gridPos": {
-        "h": 11,
-        "w": 8,
+        "h": 10,
+        "w": 12,
         "x": 0,
-        "y": 28
+        "y": 36
+      },
+      "id": 22,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "expr": "{service_namespace=\"tryops\"} |~ \"tryops.real_vton_url|tryops.fashn_router\"",
+          "refId": "A"
+        }
+      ],
+      "title": "TRYOPS_REAL_VTON_URL Logs",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 36
       },
       "id": 14,
       "options": {
@@ -1115,10 +1440,10 @@
         "uid": "loki"
       },
       "gridPos": {
-        "h": 11,
-        "w": 8,
-        "x": 8,
-        "y": 28
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 46
       },
       "id": 15,
       "options": {
@@ -1146,10 +1471,10 @@
         "uid": "loki"
       },
       "gridPos": {
-        "h": 11,
-        "w": 8,
-        "x": 16,
-        "y": 28
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 46
       },
       "id": 16,
       "options": {
@@ -1176,11 +1501,11 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 56
       },
       "id": 17,
       "options": {
-        "content": "Use **job_id**, **request_id**, and **trace_id** from the TryOps UI or API response. The top strip is the production-readiness check: platform scrape health, API error ratio, active VTON jobs, FASHN model-service errors, telemetry export failures, and log/trace storage health. The log panels below are the source of truth for model-service failures and job lifecycle debugging; open a log row to inspect `attributes.job_id`, `attributes.request_id`, `attributes.error_code`, and timing fields.",
+        "content": "Use **job_id**, **request_id**, and **trace_id** from the TryOps UI or API response. The top strip is the production-readiness check: platform scrape health, API error ratio, active VTON jobs, FASHN errors, telemetry export failures, and log/trace storage health. The FASHN serving row shows whether the router has at least one real ready worker, how many GPU workers are ready, active routed requests, and router latency. The **TRYOPS_REAL_VTON_URL Logs** panel shows API calls to the configured VTON endpoint and router routing decisions; the worker log panel shows real model inference events. Open a log row to inspect `attributes.job_id`, `attributes.request_id`, `attributes.tryops_real_vton_url`, `attributes.worker_id`, `attributes.error_code`, and timing fields.",
         "mode": "markdown"
       },
       "title": "Trace and Log Drilldown",
