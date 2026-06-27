@@ -210,6 +210,10 @@ flowchart LR
 
 ## Developer-Local `make app-up` Ports
 
+This table is the default local port inventory for `make app-up`. It is enough for `http://localhost:18081` and `http://127.0.0.1:18081`.
+
+It is not, by itself, a custom-domain setup guide. Browser login on a hosts-file domain such as `tryops.com` also needs the browser-auth requirements below: HTTPS, matching Keycloak redirect URIs, and browser-visible Keycloak public URLs.
+
 | Service | Default URL or port | Override variable | Notes |
 | --- | --- | --- | --- |
 | TryOps Console + Rust gateway | `http://127.0.0.1:18081` | `TRYOPS_GATEWAY_PORT` | Main app URL. Use this first. |
@@ -218,6 +222,7 @@ flowchart LR
 | Go controller | `http://127.0.0.1:18084` | `TRYOPS_CONTROLLER_PORT` | Webhook/control-plane service. Container port is `18082`; Alertmanager uses `http://controller:18082/alerts/webhook` inside Compose. |
 | FASHN VTON router | `http://127.0.0.1:18100` | `FASHN_VTON_ROUTER_PORT` | Host-side real VTON router started by `make app-up` before Compose. This is not a Docker Compose container. API reaches it from inside Docker through `host.docker.internal:18100`. |
 | FASHN VTON single-worker debug | `http://127.0.0.1:18101` | `FASHN_VTON_PORT` | Optional direct service for isolated debugging with `make fashn-vton-service-bg`. `make app-up` does not use it. |
+| Optional local vLLM/OpenAI-compatible LLM | `http://127.0.0.1:8000/v1` | `VLLM_PORT`, `VLLM_BASE_URL`, `TRYOPS_LLM_BASE_URL` | Host-side real LLM endpoint used only when self-hosting vLLM. If `TRYOPS_LLM_BASE_URL=https://api.openai.com/v1`, no local LLM port is needed. |
 | Postgres | `127.0.0.1:15432` | `TRYOPS_POSTGRES_PORT` | Database for the full Compose stack. |
 | Valkey | `127.0.0.1:16379` | `TRYOPS_VALKEY_PORT` | Hot quota/rate counter store. |
 | MinIO API | `http://127.0.0.1:19000` | `TRYOPS_MINIO_PORT` | Object/artifact storage API. |
@@ -382,9 +387,12 @@ These ports are used by focused Makefile samples or native tools. They are not p
 | Native edge guardrail sidecar | `http://127.0.0.1:18183` | `TRYOPS_GUARDRAIL_ADDR` in target | Guardrail sidecar used by edge guardrail smoke. |
 | Native static gateway smoke | `http://127.0.0.1:18088` | `TRYOPS_GATEWAY_ADDR` in target | Static UI serving smoke. |
 | Native edge cache gateway | `http://127.0.0.1:18089` | `TRYOPS_GATEWAY_ADDR` in target | Semantic-cache edge smoke. |
+| Gateway benchmark native gateway | `http://127.0.0.1:18091` | `--gateway-port` in `scripts/benchmark_gateway.py` | Temporary Rust gateway used by `gateway-benchmark` / `gateway-benchmark-native`. |
+| Gateway benchmark Python API | `http://127.0.0.1:18092` | `--python-port` in `scripts/benchmark_gateway.py` | Temporary FastAPI/uvicorn process used by `gateway-benchmark` / `gateway-benchmark-native`. |
 | Distributed quota Postgres sample | `127.0.0.1:15435` | `TRYOPS_DISTRIBUTED_QUOTA_POSTGRES_PORT` | Temporary Postgres host port for distributed quota admission smoke. |
 | Distributed quota gateway A | `http://127.0.0.1:18101` | hardcoded in sample | Temporary Rust gateway for distributed quota smoke. Conflicts with the optional FASHN single-worker debug service if both run at once. |
 | Distributed quota gateway B | `http://127.0.0.1:18102` | hardcoded in sample | Temporary Rust gateway for distributed quota smoke. |
+| Native TLS smoke gateway | `https://127.0.0.1:18443` | hardcoded in `native-tls-smoke`; contract URL override is `TRYOPS_TLS_CONTRACT_URL` | Temporary HTTPS Rust gateway used by `make native-tls-smoke`. Different from the Compose `gateway-tls` profile on `8443`. |
 | Native full-stack load gateway | `http://127.0.0.1:18221` | `TRYOPS_FULLSTACK_LOAD_GATEWAY_PORT` | Used by `native-fullstack-load` tooling. |
 | Native full-stack load Python API | `http://127.0.0.1:18222` | `TRYOPS_FULLSTACK_LOAD_PYTHON_PORT` | Used by `native-fullstack-load` tooling. |
 
