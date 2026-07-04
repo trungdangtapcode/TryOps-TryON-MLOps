@@ -6,7 +6,7 @@ The repo is native-first at the product boundary: a Rust gateway protects the ed
 
 ## Quick Start
 
-Start the local product stack:
+Start the local product stack (.env if you want lol):
 
 ```bash
 make app-up
