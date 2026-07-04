@@ -1,0 +1,28 @@
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {1.1}{\ignorespaces TryOps technology stack grouped by product layer.\relax }}{3}{figure.caption.4}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Product boundary architecture diagram.\relax }}{8}{figure.caption.5}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces Request flow from console entry point to model output and audit records.\relax }}{8}{figure.caption.6}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Recommended port surface for shared hosts.\relax }}{9}{figure.caption.7}%
+\contentsline {figure}{\numberline {4.4}{\ignorespaces Observability, reliability, and governance summary.\relax }}{9}{figure.caption.8}%
+\contentsline {figure}{\numberline {4.5}{\ignorespaces TryOps layered architecture.\relax }}{10}{figure.caption.9}%
+\contentsline {figure}{\numberline {4.6}{\ignorespaces TryOps Studio product surface}}{11}{figure.caption.10}%
+\contentsline {figure}{\numberline {4.7}{\ignorespaces Workspace and quota view}}{11}{figure.caption.11}%
+\contentsline {figure}{\numberline {4.8}{\ignorespaces Running VTON job in the product UI}}{12}{figure.caption.12}%
+\contentsline {figure}{\numberline {4.9}{\ignorespaces MinIO artifact store}}{13}{figure.caption.13}%
+\contentsline {figure}{\numberline {4.10}{\ignorespaces MLflow benchmark tracking}}{14}{figure.caption.14}%
+\contentsline {figure}{\numberline {4.11}{\ignorespaces Grafana observability dashboard}}{15}{figure.caption.15}%
+\contentsline {figure}{\numberline {4.12}{\ignorespaces Log drilldown dashboard for debugging jobs and requests}}{15}{figure.caption.16}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {5.1}{\ignorespaces FASHN VTON v1.5 model flow}}{16}{figure.caption.17}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {6.1}{\ignorespaces Keycloak session control and identity surface}}{19}{figure.caption.18}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {7.1}{\ignorespaces Developer-local service and port topology.\relax }}{24}{figure.caption.19}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {8.1}{\ignorespaces VTON benchmark interpretation and average latency comparison.\relax }}{28}{figure.caption.21}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {9.1}{\ignorespaces VTON over-quantization limitation}}{31}{figure.caption.23}%
+\addvspace {10\p@ }

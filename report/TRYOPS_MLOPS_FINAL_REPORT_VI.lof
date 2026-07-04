@@ -1,0 +1,25 @@
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {1.1}{\ignorespaces Technology stack của TryOps theo từng lớp sản phẩm.\relax }}{3}{figure.caption.4}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Product boundary architecture của TryOps.\relax }}{12}{figure.caption.5}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces Layered architecture của TryOps.\relax }}{12}{figure.caption.6}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Giao diện TryOps Studio}}{13}{figure.caption.7}%
+\contentsline {figure}{\numberline {4.4}{\ignorespaces Workspace và quota view}}{14}{figure.caption.8}%
+\contentsline {figure}{\numberline {4.5}{\ignorespaces VTON job đang chạy trong UI}}{14}{figure.caption.9}%
+\contentsline {figure}{\numberline {4.6}{\ignorespaces MinIO artifact store}}{16}{figure.caption.10}%
+\contentsline {figure}{\numberline {4.7}{\ignorespaces MLflow benchmark tracking}}{16}{figure.caption.11}%
+\contentsline {figure}{\numberline {4.8}{\ignorespaces Grafana observability dashboard}}{17}{figure.caption.12}%
+\contentsline {figure}{\numberline {4.9}{\ignorespaces Log drilldown dashboard để debug job và request}}{17}{figure.caption.13}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {5.1}{\ignorespaces FASHN VTON v1.5 model flow}}{18}{figure.caption.14}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {6.1}{\ignorespaces Keycloak session control và identity surface}}{21}{figure.caption.15}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {7.1}{\ignorespaces Developer-local service topology và quan hệ giữa host port, Compose network và host inference runtime.\relax }}{26}{figure.caption.16}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {8.1}{\ignorespaces Diễn giải benchmark VTON và so sánh average latency.\relax }}{30}{figure.caption.18}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {9.1}{\ignorespaces VTON optimization limitation}}{33}{figure.caption.20}%
+\addvspace {10\p@ }
