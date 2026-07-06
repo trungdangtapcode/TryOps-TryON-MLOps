@@ -209,23 +209,33 @@ http://127.0.0.1:18173
 
 ## Main Local URLs
 
-| Service | URL |
-| --- | --- |
-| TryOps Console + Gateway | `http://127.0.0.1:18081` |
-| Keycloak IAM | `http://127.0.0.1:18082` |
-| FastAPI direct access | `http://127.0.0.1:18080` |
-| FASHN VTON router | `http://127.0.0.1:18100` |
-| Grafana | `http://127.0.0.1:13000` |
-| Prometheus | `http://127.0.0.1:19090` |
-| Loki | `http://127.0.0.1:13100` |
-| Tempo | `http://127.0.0.1:13200` |
-| MLflow | `http://127.0.0.1:15000` |
-| MinIO API | `http://127.0.0.1:19000` |
-| MinIO Console | `http://127.0.0.1:19001` |
+| Service | Default URL or port | Override variable | Notes |
+| --- | --- | --- | --- |
+| TryOps Console + Rust gateway | `http://127.0.0.1:18081` | `TRYOPS_GATEWAY_PORT` | Main app URL. Use this first. |
+| FastAPI backend direct | `http://127.0.0.1:18080` | `TRYOPS_API_PORT` | Direct API/docs access. Gateway normally proxies this. |
+| Keycloak IAM | `http://127.0.0.1:18082` | `TRYOPS_KEYCLOAK_PORT` | OIDC/IAM service. Container port is `8080`. |
+| Go controller | `http://127.0.0.1:18084` | `TRYOPS_CONTROLLER_PORT` | Webhook/control-plane service. Container port is `18082`; Alertmanager uses `http://controller:18082/alerts/webhook` inside Compose. |
+| FASHN VTON router | `http://127.0.0.1:18100` | `FASHN_VTON_ROUTER_PORT` | Host-side real VTON router started by `make app-up` before Compose. This is not a Docker Compose container. API reaches it from inside Docker through `host.docker.internal:18100`. |
+| FASHN VTON single-worker debug | `http://127.0.0.1:18101` | `FASHN_VTON_PORT` | Optional direct service for isolated debugging with `make fashn-vton-service-bg`. `make app-up` does not use it. |
+| Optional local vLLM/OpenAI-compatible LLM | `http://127.0.0.1:8000/v1` | `VLLM_PORT`, `VLLM_BASE_URL`, `TRYOPS_LLM_BASE_URL` | Host-side real LLM endpoint used only when self-hosting vLLM. If `TRYOPS_LLM_BASE_URL=https://api.openai.com/v1`, no local LLM port is needed. |
+| Postgres | `127.0.0.1:15432` | `TRYOPS_POSTGRES_PORT` | Database for the full Compose stack. |
+| Valkey | `127.0.0.1:16379` | `TRYOPS_VALKEY_PORT` | Hot quota/rate counter store. |
+| MinIO API | `http://127.0.0.1:19000` | `TRYOPS_MINIO_PORT` | Object/artifact storage API. |
+| MinIO Console | `http://127.0.0.1:19001` | `TRYOPS_MINIO_CONSOLE_PORT` | Browser UI for MinIO. |
+| MLflow | `http://127.0.0.1:15000` | `TRYOPS_MLFLOW_PORT` | Experiment/model tracking. |
+| Prometheus | `http://127.0.0.1:19090` | `TRYOPS_PROMETHEUS_PORT` | Metrics database. |
+| Alertmanager | `http://127.0.0.1:19093` | `TRYOPS_ALERTMANAGER_PORT` | Alert routing. |
+| Grafana | `http://127.0.0.1:13000` | `TRYOPS_GRAFANA_PORT` | Dashboards. Grafana defaults to `admin` / `admin` on a fresh local volume. |
+| Loki | `http://127.0.0.1:13100` | `TRYOPS_LOKI_PORT` | Log store used by Grafana when `TRYOPS_OBSERVABILITY` is enabled. Container port is `3100`. |
+| Tempo | `http://127.0.0.1:13200` | `TRYOPS_TEMPO_PORT` | Trace store used by Grafana when `TRYOPS_OBSERVABILITY` is enabled. Container port is `3200`. |
+| Go guardrail sidecar | `127.0.0.1:18093` | `TRYOPS_GUARDRAIL_PORT` | LLM guardrail service. Usually called by gateway/API. Container port is `18083`. |
+| OpenTelemetry gRPC | `127.0.0.1:4317` | `TRYOPS_OTEL_GRPC_PORT` | OTLP gRPC receiver. |
+| OpenTelemetry HTTP | `127.0.0.1:4318` | `TRYOPS_OTEL_HTTP_PORT` | OTLP HTTP receiver. |
+| OpenTelemetry metrics | `127.0.0.1:8888` | `TRYOPS_OTEL_METRICS_PORT` | Collector metrics endpoint. |
+| OpenTelemetry health | `127.0.0.1:13133` | `TRYOPS_OTEL_HEALTH_PORT` | Collector health endpoint. |
+| OTel bridge metrics | `http://127.0.0.1:19122/metrics` | `TRYOPS_OTEL_BRIDGE_PORT` | Bridges local TryOps JSONL logs/traces into OTLP for Grafana/Loki/Tempo. |
 
 Grafana defaults to `admin` / `admin` on a fresh local volume. MinIO uses `TRYOPS_MINIO_ROOT_USER` and `TRYOPS_MINIO_ROOT_PASSWORD` from `.env`.
-
-See [PORT.md](PORT.md) for the full port policy and shared-datacenter recommendations.
 
 ## Observability
 
