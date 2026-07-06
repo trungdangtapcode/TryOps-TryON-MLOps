@@ -4,6 +4,78 @@ TryOps is an MLOps product stack for AI virtual try-on, LLM-assisted product wor
 
 The local stack is designed around one command, but it still expects model endpoint configuration. `make app-up` starts the product stack, prepares the FASHN VTON runtime, starts the host-side VTON router, and then brings up the Docker Compose services.
 
+## Tech Stack
+
+<table>
+  <tr>
+    <th align="left">Frontend</th>
+    <td>
+      <img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=061421" alt="React">
+      <img src="https://img.shields.io/badge/TypeScript-5-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript">
+      <img src="https://img.shields.io/badge/Vite-7-646CFF?style=for-the-badge&logo=vite&logoColor=white" alt="Vite">
+      <img src="https://img.shields.io/badge/Tailwind_CSS-4-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind CSS">
+      <img src="https://img.shields.io/badge/Lucide_React-icons-F56565?style=for-the-badge&logo=lucide&logoColor=white" alt="Lucide React">
+    </td>
+  </tr>
+  <tr>
+    <th align="left">Backend / Server</th>
+    <td>
+      <img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL">
+      <img src="https://img.shields.io/badge/FastAPI-BFF-009688?style=for-the-badge&logo=fastapi&logoColor=white" alt="FastAPI">
+      <img src="https://img.shields.io/badge/Axum-0.8-2E3440?style=for-the-badge&logo=rust&logoColor=white" alt="Axum">
+      <img src="https://img.shields.io/badge/Tokio-1-2E3440?style=for-the-badge&logo=rust&logoColor=white" alt="Tokio">
+      <img src="https://img.shields.io/badge/Tower_HTTP-0.6-2E3440?style=for-the-badge&logo=rust&logoColor=white" alt="Tower HTTP">
+      <img src="https://img.shields.io/badge/Reqwest-0.12-2E3440?style=for-the-badge&logo=rust&logoColor=white" alt="Reqwest">
+      <img src="https://img.shields.io/badge/Rustls-0.23-2E3440?style=for-the-badge&logo=rust&logoColor=white" alt="Rustls">
+      <img src="https://img.shields.io/badge/Serde-1-2E3440?style=for-the-badge&logo=rust&logoColor=white" alt="Serde">
+      <img src="https://img.shields.io/badge/Tracing-0.1-2E3440?style=for-the-badge&logo=rust&logoColor=white" alt="Tracing">
+      <img src="https://img.shields.io/badge/Tokio_Postgres-0.7-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="Tokio Postgres">
+      <img src="https://img.shields.io/badge/Go-services-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go">
+      <img src="https://img.shields.io/badge/x%2Fimage-demo_recorder-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="golang.org/x/image">
+      <img src="https://img.shields.io/badge/net%2Fhttp-standard_library-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go net/http">
+      <img src="https://img.shields.io/badge/encoding%2Fjson-standard_library-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go encoding/json">
+      <img src="https://img.shields.io/badge/pgx%2Fpgxpool-v5-336791?style=for-the-badge&logo=postgresql&logoColor=white" alt="pgx pgxpool">
+      <img src="https://img.shields.io/badge/yaml.v3-config_contracts-CB171E?style=for-the-badge&logo=yaml&logoColor=white" alt="yaml.v3">
+      <img src="https://img.shields.io/badge/C%2B%2B17-native_tools-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++17">
+      <img src="https://img.shields.io/badge/C%2B%2B17-STL-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++17 STL">
+      <img src="https://img.shields.io/badge/GCC%2Fg%2B%2B-native_build-2E3440?style=for-the-badge&logo=gnu&logoColor=white" alt="GCC g++">
+      <img src="https://img.shields.io/badge/Makefile-build_targets-427819?style=for-the-badge&logo=gnu&logoColor=white" alt="Makefile build targets">
+      <img src="https://img.shields.io/badge/regex%2Fchrono%2Ffilesystem-STL_modules-00599C?style=for-the-badge&logo=cplusplus&logoColor=white" alt="C++ standard library modules">
+      <img src="https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python">
+      <img src="https://img.shields.io/badge/Rust-gateway-000000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust">
+    </td>
+  </tr>
+  <tr>
+    <th align="left">AI / ML Stack</th>
+    <td>
+      <img src="https://img.shields.io/badge/PyTorch-GPU_inference-EE4C2C?style=for-the-badge&logo=pytorch&logoColor=white" alt="PyTorch">
+      <img src="https://img.shields.io/badge/Hugging_Face-model_hub-FFD21E?style=for-the-badge&logo=huggingface&logoColor=black" alt="Hugging Face">
+      <img src="https://img.shields.io/badge/FASHN_VTON-1.5-111111?style=for-the-badge" alt="FASHN VTON">
+      <img src="https://img.shields.io/badge/OpenAI_API-compatible-412991?style=for-the-badge&logo=openai&logoColor=white" alt="OpenAI API">
+      <img src="https://img.shields.io/badge/vLLM-local_serving-76B900?style=for-the-badge" alt="vLLM">
+    </td>
+  </tr>
+  <tr>
+    <th align="left">Ops Stack</th>
+    <td>
+      <img src="https://img.shields.io/badge/Prometheus-metrics-E6522C?style=for-the-badge&logo=prometheus&logoColor=white" alt="Prometheus">
+      <img src="https://img.shields.io/badge/Grafana-dashboards-F46800?style=for-the-badge&logo=grafana&logoColor=white" alt="Grafana">
+      <img src="https://img.shields.io/badge/MLflow-tracking-0194E2?style=for-the-badge&logo=mlflow&logoColor=white" alt="MLflow">
+      <img src="https://img.shields.io/badge/HAProxy-optional_edge_LB-106DA9?style=for-the-badge&logo=haproxy&logoColor=white" alt="HAProxy load balancer">
+      <img src="https://img.shields.io/badge/DVC-data_versioning-13ADC7?style=for-the-badge&logo=dvc&logoColor=white" alt="DVC">
+      <img src="https://img.shields.io/badge/MinIO-artifact_store-C72E49?style=for-the-badge&logo=minio&logoColor=white" alt="MinIO">
+      <img src="https://img.shields.io/badge/Valkey-8-DC382D?style=for-the-badge&logo=valkey&logoColor=white" alt="Valkey">
+      <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose">
+      <img src="https://img.shields.io/badge/Kubernetes-manifests-326CE5?style=for-the-badge&logo=kubernetes&logoColor=white" alt="Kubernetes manifests">
+      <img src="https://img.shields.io/badge/Loki-logs-F46800?style=for-the-badge&logo=grafana&logoColor=white" alt="Loki">
+      <img src="https://img.shields.io/badge/Tempo-traces-F46800?style=for-the-badge&logo=grafana&logoColor=white" alt="Tempo">
+      <img src="https://img.shields.io/badge/OpenTelemetry-OTLP-000000?style=for-the-badge&logo=opentelemetry&logoColor=white" alt="OpenTelemetry">
+      <img src="https://img.shields.io/badge/Alertmanager-alerts-E6522C?style=for-the-badge&logo=prometheus&logoColor=white" alt="Alertmanager">
+      <img src="https://img.shields.io/badge/Keycloak-IAM-4D4D4D?style=for-the-badge&logo=keycloak&logoColor=white" alt="Keycloak">
+    </td>
+  </tr>
+</table>
+
 ## Visual Overview
 
 ### Product Screenshots
