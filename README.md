@@ -96,6 +96,40 @@ The local stack is designed around one command, but it still expects model endpo
 | --- | --- |
 | ![MLflow](report/assets/screenshots/mlflow.png) | ![MinIO](report/assets/screenshots/minIO.png) |
 
+### CI/CD Pipeline
+
+<p>
+  <img src="https://img.shields.io/badge/GitHub_Actions-CI%2FCD-2088FF?style=for-the-badge&logo=githubactions&logoColor=white" alt="GitHub Actions">
+  <img src="https://img.shields.io/badge/Docker_Buildx-image_builds-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Buildx">
+  <img src="https://img.shields.io/badge/GHCR-container_registry-181717?style=for-the-badge&logo=github&logoColor=white" alt="GitHub Container Registry">
+  <img src="https://img.shields.io/badge/Syft-SBOM-5B45B1?style=for-the-badge" alt="Syft SBOM">
+  <img src="https://img.shields.io/badge/Trivy-HIGH%2FCRITICAL_gate-1904DA?style=for-the-badge&logo=trivy&logoColor=white" alt="Trivy scan gate">
+  <img src="https://img.shields.io/badge/Cosign-keyless_signing-3C3C3D?style=for-the-badge&logo=sigstore&logoColor=white" alt="Cosign keyless signing">
+</p>
+
+The project includes a GitHub Actions workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml). It runs on pull requests, pushes to `main` / `production`, and manual dispatches.
+
+```mermaid
+flowchart LR
+  trigger["PR / main / production / manual"] --> local_ci["Local CI<br/>Python, web, Go, Rust, C++"]
+  local_ci --> contracts["Contracts<br/>Compose, containers, secrets, incidents"]
+  contracts --> evidence["Evaluation artifacts<br/>artifacts/eval + reports/generated"]
+
+  trigger --> images["Image matrix<br/>gateway, controller, guardrail, benchmark,<br/>cpp-tools, api, web-assets"]
+  images --> sbom["SBOM<br/>Syft SPDX"]
+  sbom --> scan["Security gate<br/>Trivy HIGH / CRITICAL"]
+  scan --> sign["Non-PR release<br/>GHCR push + Cosign OIDC signing"]
+  sign --> artifacts["CI artifacts<br/>SBOM, scan, signatures"]
+```
+
+| Stage | Coverage |
+| --- | --- |
+| Test and build | Python contracts, React typecheck/build, native Go tests, Rust gateway tests, and C++ native tests. |
+| Runtime contracts | Docker Compose validation, container contract checks, dependency lock, secret rotation, and incident workflow checks. |
+| Supply chain | SBOM generation, vulnerability scan reports, CI contract validation, and uploaded evaluation artifacts. |
+| Image pipeline | Builds seven container roles with Docker Buildx: gateway, controller, guardrail, benchmark, cpp-tools, api, and web-assets. |
+| Release security | Pushes images to GHCR on non-PR runs, emits build provenance/SBOM, and signs release images with Cosign keyless OIDC. |
+
 ### Runtime Architecture
 
 ```mermaid
